@@ -15,6 +15,11 @@ app.get("/", (req, res) => {
   res.send("Gestor de Tarefas API is running");
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+// Apenas escuta na porta se não estivermos no ambiente da Vercel
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+  });
+}
+
+module.exports = app;
