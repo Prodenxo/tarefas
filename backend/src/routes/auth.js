@@ -8,6 +8,14 @@ require("dotenv").config();
 // Login
 router.post("/login", async (req, res) => {
   try {
+    if (!req.body) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "Corpo da requisição não encontrado. Verifique o Content-Type: application/json.",
+        });
+    }
     const { email, password } = req.body;
 
     const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
