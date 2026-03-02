@@ -86,14 +86,13 @@ router.post("/", async (req, res) => {
     try {
       // Buscar o telefone do criador
       const [userRows] = await pool.query(
-        "SELECT wa_instance, email FROM users WHERE id = ?",
+        "SELECT whatsapp_number, email FROM users WHERE id = ?",
         [req.user.id],
       );
-      if (userRows.length > 0 && userRows[0].wa_instance) {
-        // Se você tiver o telefone do usuário na wa_instance ou em outra coluna
-        // Por enquanto, vou supor que o 'wa_instance' do usuário seja o seu número do zap
+      if (userRows.length > 0 && userRows[0].whatsapp_number) {
+        // Enviar mensagem para o número de WhatsApp do usuário
         await sendWhatsAppMessage(
-          userRows[0].wa_instance,
+          userRows[0].whatsapp_number,
           `✅ Nova tarefa criada: *${title}* \nStatus: ${status || "Iniciada"}`,
         );
       }

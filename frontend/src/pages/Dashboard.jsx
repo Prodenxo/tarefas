@@ -170,6 +170,7 @@ export default function Dashboard() {
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [dragOverStatus, setDragOverStatus] = useState(null);
   const [waInstance, setWaInstance] = useState('');
+  const [waNumber, setWaNumber] = useState('');
 
   const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -311,7 +312,10 @@ export default function Dashboard() {
   useEffect(() => {
     if (activeTab === 'settings') {
       axios.get(`${apiUrl}/users/${user.id}`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(res => setWaInstance(res.data.wa_instance || ''))
+        .then(res => {
+          setWaInstance(res.data.wa_instance || '');
+          setWaNumber(res.data.whatsapp_number || '');
+        })
         .catch(err => console.error(err));
     }
   }, [activeTab, user.id, apiUrl, token]);
@@ -319,10 +323,10 @@ export default function Dashboard() {
   const handleUpdateWaInstance = async () => {
     try {
       await axios.put(`${apiUrl}/users/${user.id}`, 
-        { ...user, wa_instance: waInstance }, 
+        { ...user, wa_instance: waInstance, whatsapp_number: waNumber }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      showToast("Configuração salva com sucesso!");
+      showToast("Configurações salvas com sucesso!");
     } catch (err) {
       showToast("Erro ao salvar configuração", "error");
     }
@@ -1101,9 +1105,22 @@ export default function Dashboard() {
                   onChange={(e) => setWaInstance(e.target.value)}
                 />
               </div>
+
+              <div className="form-group mt-4">
+                <label>Seu Número do WhatsApp (Com DDD)</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: 11999999999" 
+                  value={waNumber}
+                  onChange={(e) => setWaNumber(e.target.value)}
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Este número receberá avisos quando você criar novas tarefas.
+                </p>
+              </div>
               
-              <button className="btn-primary w-full mt-4" onClick={handleUpdateWaInstance}>
-                Salvar Configuração
+              <button className="btn-primary w-full mt-6" onClick={handleUpdateWaInstance}>
+                Salvar Configurações
               </button>
             </div>
 
