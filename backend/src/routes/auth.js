@@ -8,13 +8,14 @@ require("dotenv").config();
 // Login
 router.post("/login", async (req, res) => {
   try {
-    if (!req.body) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Corpo da requisição não encontrado. Verifique o Content-Type: application/json.",
-        });
+    console.log("[DEBUG] Headers:", req.headers);
+    console.log("[DEBUG] Body:", req.body);
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        error: "Corpo da requisição vazio ou inválido.",
+        received_body: req.body,
+        content_type: req.headers["content-type"],
+      });
     }
     const { email, password } = req.body;
 
