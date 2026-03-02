@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../config/database");
+const { sendWhatsAppMessage } = require("../services/whatsapp");
 console.log(">>> LOADING TASKS ROUTER <<<");
 
 // Listar tarefas da empresa atual com lógica de visibilidade
@@ -80,6 +81,25 @@ router.post("/", async (req, res) => {
       "INSERT INTO tasks (company_id, created_by_user_id, title, status, due_date) VALUES (?, ?, ?, ?, ?)",
       [company_id, req.user.id, title, status || "Iniciada", due_date || null],
     );
+
+    // Enviar notificação por WhatsApp (Opcional)
+    try {
+      // Buscar o telefone do criador
+      const [userRows] = await pool.query(
+        "SELECT wa_instance, email FROM users WHERE id = ?",
+        [req.user.id],
+      );
+      if (userRows.length > 0 && userRows[0].wa_instance) {
+        // Se você tiver o telefone do usuário na wa_instance ou em outra coluna
+        // Por enquanto, vou supor que o 'wa_instance' do usuário seja o seu número do zap
+        await sendWhatsAppMessage(
+          userRows[0].wa_instance,
+          `✅ Nova tarefa criada: *${title}* \nStatus: ${status || "Iniciada"}`,
+        );
+      }
+    } catch (wsErr) {
+      console.error("[WhatsApp Integration] Falha no aviso:", wsErr.message);
+    }
 
     res.status(201).json({
       id: result.insertId,
