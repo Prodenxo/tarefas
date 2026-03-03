@@ -63,40 +63,80 @@ const handleWebhook = async (req, res) => {
         `[Webhook] Texto: "${text}" de: ${remoteJid} (fromMe: ${key.fromMe})`,
       );
 
-      // COMANDO: create [Título da Tarefa]
+      // COMANDO: create [Título] para [Nome] data [DD/MM]
       const match = text.trim().match(/^create\s+(.*)$/i);
       if (match) {
-        const title = match[1].trim() || "Nova tarefa via WhatsApp";
+        let fullText = match[1].trim();
+        let title = fullText;
+        let assignedToId = null;
+        let assignedToName = null;
+        let dueDate = null;
 
+        // 1. EXTRAIR DATA (Ex: data 05/03)
+        const dateMatch = fullText.match(
+          /\bdata\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/i,
+        );
+        if (dateMatch) {
+          const day = dateMatch[1].padStart(2, "0");
+          const month = dateMatch[2].padStart(2, "0");
+          const year = dateMatch[3] || new Date().getFullYear();
+          dueDate = `${year}-${month}-${day}`;
+          title = title.replace(dateMatch[0], "").trim();
+        }
+
+        // 2. EXTRAIR RESPONSÁVEL (Ex: para Leonardo)
+        const [allUsers] = await pool.query("SELECT id, name FROM users");
+        const forMatch = fullText.match(/\bpara\s+([^\s\d]+)\b/i);
+        if (forMatch) {
+          const targetName = forMatch[1].toLowerCase();
+          const userFound = allUsers.find((u) =>
+            u.name.toLowerCase().includes(targetName),
+          );
+          if (userFound) {
+            assignedToId = userFound.id;
+            assignedToName = userFound.name;
+            title = title.replace(forMatch[0], "").trim();
+          }
+        }
+
+        // 3. BUSCAR USUÁRIO QUE ENVIOU
         const [users] = await pool.query(
           "SELECT u.id, u.name, uc.company_id FROM users u LEFT JOIN user_companies uc ON u.id = uc.user_id WHERE LOWER(u.wa_instance) = LOWER(?) OR (u.wa_instance IS NULL AND u.id = 1) LIMIT 1",
           [instanceName],
         );
 
         if (users.length > 0) {
-          const user = users[0];
+          const creator = users[0];
 
+          // 4. INSERIR TAREFA
           const [result] = await pool.query(
-            "INSERT INTO tasks (company_id, created_by_user_id, title, status) VALUES (?, ?, ?, 'Iniciada')",
-            [user.company_id || 1, user.id, `[Zap] ${title}`],
+            "INSERT INTO tasks (company_id, created_by_user_id, assigned_to_user_id, title, status, due_date) VALUES (?, ?, ?, ?, 'Iniciada', ?)",
+            [
+              creator.company_id || 1,
+              creator.id,
+              assignedToId || creator.id, // Se não tiver, vai para quem criou
+              `[Zap] ${title}`,
+              dueDate,
+            ],
           );
 
           console.log(
-            `[Webhook] SUCESSO: Tarefa #${result.insertId} criada para ${user.name}`,
+            `[Webhook] SUCESSO: Tarefa #${result.insertId} criada por ${creator.name} para ${assignedToName || creator.name}`,
           );
 
-          // Tentar responder, mas não falhar o webhook se a API estiver inacessível
+          // 5. RESPONDER NO WHATSAPP
           try {
-            await sendReply(
-              instanceName,
-              remoteJid,
-              `✅ *Tarefa registrada!* \n\n📌 *ID:* ${result.insertId}\n📌 *Título:* ${title}\n👤 *Para:* ${user.name}\n🚀 *Status:* Pendente`,
-            );
+            let replyText = `✅ *Tarefa registrada!* \n\n`;
+            replyText += `📌 *ID:* ${result.insertId}\n`;
+            replyText += `📌 *Título:* ${title}\n`;
+            replyText += `👤 *Responsável:* ${assignedToName || creator.name}\n`;
+            if (dueDate)
+              replyText += `📅 *Prazo:* ${dateMatch[1]}/${dateMatch[2]}\n`;
+            replyText += `🚀 *Status:* Iniciada`;
+
+            await sendReply(instanceName, remoteJid, replyText);
           } catch (replyErr) {
-            console.error(
-              "[Webhook] Falha ao enviar resposta (URL da API inacessível):",
-              replyErr.message,
-            );
+            console.error("[Webhook] Erro ao responder:", replyErr.message);
           }
         } else {
           console.log(
