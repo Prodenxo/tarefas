@@ -63,12 +63,12 @@ const handleWebhook = async (req, res) => {
         `[Webhook] Texto: "${text}" de: ${remoteJid} (fromMe: ${key.fromMe})`,
       );
 
-      // --- INÍCIO DO FLUXO CONVERSACIONAL (VERSÃO 2.0 - IDENTIDADE POR NÚMERO) ---
+      // --- INÍCIO DO FLUXO CONVERSACIONAL (VERSÃO 2.1 - IDENTIDADE ROBUSTA) ---
       const cleanRemoteJid = remoteJid.split("@")[0].replace(/\D/g, "");
 
-      // 1. IDENTIFICAR USUÁRIO PELO NÚMERO DE WHATSAPP
+      // 1. IDENTIFICAR USUÁRIO PELO NÚMERO DE WHATSAPP (Busca flexível para DDD+Número ou 55+DDD+Número)
       const [users] = await pool.query(
-        "SELECT id, name, role FROM users WHERE whatsapp_number = ? OR (wa_instance = ? AND whatsapp_number IS NULL) LIMIT 1",
+        "SELECT id, name, role FROM users WHERE ? LIKE CONCAT('%', whatsapp_number) AND whatsapp_number IS NOT NULL AND whatsapp_number != '' OR (wa_instance = ? AND whatsapp_number IS NULL) LIMIT 1",
         [cleanRemoteJid, instanceName],
       );
 
