@@ -23,22 +23,20 @@ router.get("/", async (req, res) => {
         req.user.role === "superadmin" ||
         req.user.role === "admin"
       ) {
-        query += " AND t.created_by_user_id = ?";
-        params.push(user_id);
+        query += " AND (t.created_by_user_id = ? OR t.assigned_to_user_id = ?)";
+        params.push(user_id, user_id);
       } else {
-        // Colaborador normal só pode ver as próprias, mesmo se tentar forçar outro user_id
-        query += " AND t.created_by_user_id = ?";
-        params.push(req.user.id);
+        query += " AND (t.created_by_user_id = ? OR t.assigned_to_user_id = ?)";
+        params.push(req.user.id, req.user.id);
       }
     } else {
-      // Se não passar user_id, mantemos a lógica anterior: gestores veem tudo, outros só as próprias
       if (
         req.user.role !== "gestor" &&
         req.user.role !== "superadmin" &&
         req.user.role !== "admin"
       ) {
-        query += " AND t.created_by_user_id = ?";
-        params.push(req.user.id);
+        query += " AND (t.created_by_user_id = ? OR t.assigned_to_user_id = ?)";
+        params.push(req.user.id, req.user.id);
       }
     }
 
@@ -78,8 +76,15 @@ router.post("/", async (req, res) => {
     }
 
     const [result] = await pool.query(
-      "INSERT INTO tasks (company_id, created_by_user_id, title, status, due_date) VALUES (?, ?, ?, ?, ?)",
-      [company_id, req.user.id, title, status || "Iniciada", due_date || null],
+      "INSERT INTO tasks (company_id, created_by_user_id, assigned_to_user_id, title, status, due_date) VALUES (?, ?, ?, ?, ?, ?)",
+      [
+        company_id,
+        req.user.id,
+        req.user.id,
+        title,
+        status || "Iniciada",
+        due_date || null,
+      ],
     );
 
     // Enviar notificação por WhatsApp (Opcional)
