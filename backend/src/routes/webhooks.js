@@ -69,10 +69,10 @@ const handleWebhook = async (req, res) => {
       // --- INÍCIO DO FLUXO CONVERSACIONAL (VERSÃO 2.1 - IDENTIDADE ROBUSTA) ---
       const cleanRemoteJid = remoteJid.split("@")[0].replace(/\D/g, "");
 
-      // 1. IDENTIFICAR USUÁRIO ESTREITAMENTE PELO NÚMERO DE WHATSAPP
-      // Removida identificação por instância para evitar que números não vinculados caiam em perfis de Admin/Gestor padrão.
+      // 1. IDENTIFICAR USUÁRIO COM PRECISÃO PELO NÚMERO DE WHATSAPP
+      // Busca exata pelo final do número para evitar conflitos de JID v2
       const [users] = await pool.query(
-        "SELECT id, name, role FROM users WHERE ? LIKE CONCAT('%', whatsapp_number) AND whatsapp_number IS NOT NULL AND whatsapp_number != '' LIMIT 1",
+        "SELECT id, name, role FROM users WHERE whatsapp_number IS NOT NULL AND ? LIKE CONCAT('%', whatsapp_number) AND LENGTH(whatsapp_number) >= 8 LIMIT 1",
         [cleanRemoteJid],
       );
 
@@ -198,19 +198,23 @@ const handleWebhook = async (req, res) => {
         sessionData.company_id = selectedCompany.id;
         sessionData.company_name = selectedCompany.name;
 
-        // Regra Rigorosa: Buscar papel REAL no banco agora para evitar cache ou erro de sessão
+        // Regra de Ouro: Consultar o cargo LOCAL do usuário exatamente nesta empresa
         const [roles] = await pool.query(
           "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ? LIMIT 1",
           [userId, selectedCompany.id],
         );
-        const actualCompanyRole = (roles[0]?.role || "").toLowerCase();
+
+        const localRole = (roles[0]?.role || "").toLowerCase();
         const isAdminGlobal = (user.role || "").toLowerCase() === "superadmin";
 
-        // Só pode delegar se for Admin Global ou tiver papel de 'admin'/'gestor' NESTA empresa.
+        // SÓ pode delegar se for SuperAdmin GLOBAL ou se o cargo LOCAL na empresa for 'admin' ou 'gestor'.
+        // Qualquer outro cargo (user, colab, etc) cai no fluxo de "Criar para si mesmo".
         let canManage =
-          isAdminGlobal ||
-          actualCompanyRole === "admin" ||
-          actualCompanyRole === "gestor";
+          isAdminGlobal || localRole === "admin" || localRole === "gestor";
+
+        console.log(
+          `[Segurança] User: ${user.name}, Empresa: ${selectedCompany.id}, Role Local: ${localRole}, Pode Delegar: ${canManage}`,
+        );
 
         if (canManage) {
           sessionData.can_manage = true;
