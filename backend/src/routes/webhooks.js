@@ -17,6 +17,7 @@ const handleWebhook = async (req, res) => {
   try {
     const payload = req.body;
     logWebhook(payload);
+    const { event, instance, data } = payload;
     // Algumas versões da Evolution mandam "nome:token" no campo instance
     const instanceName = instance ? instance.split(":")[0] : null;
 
