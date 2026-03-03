@@ -17,10 +17,11 @@ const handleWebhook = async (req, res) => {
   try {
     const payload = req.body;
     logWebhook(payload);
-    const { event, instance, data } = payload;
+    // Algumas versões da Evolution mandam "nome:token" no campo instance
+    const instanceName = instance ? instance.split(":")[0] : null;
 
     console.log(
-      `[Webhook] Evento recebido: ${event} na instância: ${instance}`,
+      `[Webhook] Evento recebido: ${event} na instância: ${instanceName} (original: ${instance})`,
     );
 
     if (event === "messages.upsert") {
@@ -83,7 +84,7 @@ const handleWebhook = async (req, res) => {
            FROM users u 
            LEFT JOIN user_companies uc ON u.id = uc.user_id 
            WHERE u.wa_instance = ? LIMIT 1`,
-          [instance],
+          [instanceName || instance],
         );
 
         console.log(

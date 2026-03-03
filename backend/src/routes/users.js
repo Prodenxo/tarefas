@@ -22,7 +22,7 @@ router.get("/", async (req, res) => {
       // Gestor só vê usuários que estão vinculados a PELO MENOS UMA empresa que ele também está vinculado
       query = `
         SELECT 
-          u.id, u.name, u.email, u.role, u.active, u.created_at,
+          u.id, u.name, u.email, u.role, u.active, u.wa_instance, u.whatsapp_number, u.created_at,
           JSON_ARRAYAGG(
             JSON_OBJECT('id', c.id, 'name', c.name)
           ) as linked_companies
@@ -40,7 +40,7 @@ router.get("/", async (req, res) => {
       // Superadmin/Admin vê tudo
       query = `
         SELECT 
-          u.id, u.name, u.email, u.role, u.active, u.created_at,
+          u.id, u.name, u.email, u.role, u.active, u.wa_instance, u.whatsapp_number, u.created_at,
           JSON_ARRAYAGG(
             JSON_OBJECT('id', c.id, 'name', c.name)
           ) as linked_companies
@@ -107,7 +107,7 @@ router.get("/:id", async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      "SELECT id, name, email, role, active, created_at FROM users WHERE id = ?",
+      "SELECT id, name, email, role, active, wa_instance, whatsapp_number, created_at FROM users WHERE id = ?",
       [id],
     );
     if (rows.length === 0)
@@ -149,63 +149,66 @@ router.put("/:id", async (req, res) => {
     ];
 
     if (role) {
-      if (req.user.role === "superadmin") {
-        updateQuery =
-          "UPDATE users SET name = ?, email = ?, active = ?, role = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
-        params = [
-          name,
-          email,
-          active !== undefined ? active : 1,
-          role,
-          wa_instance || null,
-          whatsapp_number || null,
-          id,
-        ];
-      } else if (req.user.role === "gestor") {
-        // Gestor não pode mudar o próprio cargo
-        if (req.user.id == id) {
-          return res.status(403).json({
-            message: "Gestores não podem alterar o seu próprio cargo.",
-          });
-        }
+      // Primeiro buscamos a role atual para ver se mudou
+      const [currentUserRows] = await pool.query(
+        "SELECT role FROM users WHERE id = ?",
+        [id],
+      );
+      const currentRole =
+        currentUserRows.length > 0 ? currentUserRows[0].role : null;
 
-        // Buscar role atual do usuário sendo editado
-        const [targetUser] = await pool.query(
-          "SELECT role FROM users WHERE id = ?",
-          [id],
-        );
-
-        if (targetUser.length > 0) {
-          const currentRole = targetUser[0].role;
-
-          // REGRA DE HIERARQUIA: Gestor só pode mexer em quem é 'user' (Colaborador)
-          // Uma vez que o usuário é Gestor, ele só pode ser editado por Superadmin.
-          if (currentRole === "user" && role !== "superadmin") {
-            updateQuery =
-              "UPDATE users SET name = ?, email = ?, active = ?, role = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
-            params = [
-              name,
-              email,
-              active !== undefined ? active : 1,
-              role,
-              wa_instance || null,
-              whatsapp_number || null,
-              id,
-            ];
-          } else if (role === "superadmin") {
+      // Só executa lógica de cargo se estiver TENTANDO MUDAR o cargo
+      if (role !== currentRole) {
+        if (req.user.role === "superadmin") {
+          updateQuery =
+            "UPDATE users SET name = ?, email = ?, active = ?, role = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
+          params = [
+            name,
+            email,
+            active !== undefined ? active : 1,
+            role,
+            wa_instance || null,
+            whatsapp_number || null,
+            id,
+          ];
+        } else if (req.user.role === "gestor") {
+          // Gestor não pode mudar o próprio cargo
+          if (req.user.id == id) {
             return res.status(403).json({
-              message: "Gestores não podem promover usuários a Superadmin.",
-            });
-          } else if (currentRole !== "user") {
-            return res.status(403).json({
-              message:
-                "Gestores não podem alterar cargos de outros Gestores ou Superadmins.",
+              message: "Gestores não podem alterar o seu próprio cargo.",
             });
           }
+
+          if (currentUserRows.length > 0) {
+            // REGRA DE HIERARQUIA: Gestor só pode mexer em quem é 'user' (Colaborador)
+            // Uma vez que o usuário é Gestor, ele só pode ser editado por Superadmin.
+            if (currentRole === "user" && role !== "superadmin") {
+              updateQuery =
+                "UPDATE users SET name = ?, email = ?, active = ?, role = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
+              params = [
+                name,
+                email,
+                active !== undefined ? active : 1,
+                role,
+                wa_instance || null,
+                whatsapp_number || null,
+                id,
+              ];
+            } else if (role === "superadmin") {
+              return res.status(403).json({
+                message: "Gestores não podem promover usuários a Superadmin.",
+              });
+            } else if (currentRole !== "user") {
+              return res.status(403).json({
+                message:
+                  "Gestores não podem alterar cargos de outros Gestores ou Superadmins.",
+              });
+            }
+          }
+        } else if (req.user.id != id) {
+          // Usuário normal tentando mudar role de outro
+          return res.status(403).json({ message: "Acesso negado." });
         }
-      } else if (req.user.id != id) {
-        // Usuário normal tentando mudar role de outro
-        return res.status(403).json({ message: "Acesso negado." });
       }
     }
 
