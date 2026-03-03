@@ -197,14 +197,11 @@ const handleWebhook = async (req, res) => {
         sessionData.company_id = selectedCompany.id;
         sessionData.company_name = selectedCompany.name;
 
-        // Regra: Apenas Superadmin ou Gestores daquela empresa específica podem delegar.
-        const isAdminGlobal = user.role === "superadmin";
+        // Regra Rigorosa: Apenas Superadmin ou Gestores daquela empresa específica podem delegar.
+        const isAdminGlobal = (user.role || "").toLowerCase() === "superadmin";
         const companyRole = (selectedCompany.role || "").toLowerCase();
 
-        console.log(
-          `[Webhook] Verificando Permissão: User=${user.name} (Global:${user.role}), Empresa=${selectedCompany.name} (Local:${companyRole})`,
-        );
-
+        // O papel global "gestor" não dá poder automático, apenas o papel LOCAL na empresa (admin ou gestor) ou ser Superadmin.
         let canManage =
           isAdminGlobal || companyRole === "admin" || companyRole === "gestor";
 
