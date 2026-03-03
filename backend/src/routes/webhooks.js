@@ -63,6 +63,9 @@ const handleWebhook = async (req, res) => {
         `[Webhook] Texto: "${text}" de: ${remoteJid} (fromMe: ${key.fromMe})`,
       );
 
+      // Ignorar mensagens enviadas por mim mesmo para evitar loops
+      if (key.fromMe) return res.sendStatus(200);
+
       // --- INÍCIO DO FLUXO CONVERSACIONAL (VERSÃO 2.1 - IDENTIDADE ROBUSTA) ---
       const cleanRemoteJid = remoteJid.split("@")[0].replace(/\D/g, "");
 
@@ -76,6 +79,15 @@ const handleWebhook = async (req, res) => {
         console.log(
           `[Webhook] Usuário não identificado para o número: ${cleanRemoteJid}`,
         );
+
+        // Só responde se a pessoa estiver tentando usar o comando "create"
+        if (text.trim().match(/^create\s*(.*)$/i)) {
+          await sendReply(
+            instanceName,
+            remoteJid,
+            "⚠️ O vínculo deste número de WhatsApp não foi identificado no sistema e não é possível prosseguir.\n\nPor favor, entre em contato com o administrador para realizar o vínculo.",
+          );
+        }
         return res.sendStatus(200);
       }
 
