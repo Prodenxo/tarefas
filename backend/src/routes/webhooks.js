@@ -198,22 +198,22 @@ const handleWebhook = async (req, res) => {
         sessionData.company_id = selectedCompany.id;
         sessionData.company_name = selectedCompany.name;
 
-        // Regra de Ouro: Consultar o cargo LOCAL do usuário exatamente nesta empresa
+        // --- VERIFICAÇÃO DE SEGURANÇA EM TEMPO REAL ---
         const [roles] = await pool.query(
           "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ? LIMIT 1",
           [userId, selectedCompany.id],
         );
 
-        const localRole = (roles[0]?.role || "").toLowerCase().trim();
+        const dbRole = (roles[0]?.role || "").toLowerCase().trim();
         const isAdminGlobal =
           (user.role || "").toLowerCase().trim() === "superadmin";
 
-        // Regra Dinâmica: Delegar só se for Gestor/Admin Local ou Admin Global
+        // Só delega se for SuperAdmin GLOBAL ou se o cargo NESTA empresa for gestor/admin
         let canManage =
-          isAdminGlobal || localRole === "admin" || localRole === "gestor";
+          isAdminGlobal || dbRole === "gestor" || dbRole === "admin";
 
         console.log(
-          `[DINÂMICO] User: ${user.name} | Empresa: ${selectedCompany.name} | Role Local: "${localRole}" | Pode Delegar? ${canManage}`,
+          `[BLOQUEIO] Tentativa: ${user.name} | Empresa: ${selectedCompany.name} | Cargo no BD: "${dbRole}" | Resultado: ${canManage ? "Delegar" : "Para si"}`,
         );
 
         if (canManage) {
