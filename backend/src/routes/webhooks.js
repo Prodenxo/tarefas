@@ -173,14 +173,18 @@ const handleWebhook = async (req, res) => {
         sessionData.company_id = selectedCompany.id;
         sessionData.company_name = selectedCompany.name;
 
-        // Validar Perfil na Empresa Escolhida
-        let canManage = user.role === "superadmin";
-        if (!canManage) {
-          const companyRole = selectedCompany.role;
-          if (companyRole === "admin" || companyRole === "gestor") {
-            canManage = true;
-          }
-        }
+        // Validar Perfil na Empresa Escolhida (VERSÃO 2.2 - TRAVA DE SEGURANÇA GLOBAL)
+        // Regra: Apenas Superadmin ou Gestores Globais podem delegar.
+        // Usuários comuns (role: 'user') sempre criam para si mesmos.
+        const isGestorOuAdmin =
+          user.role === "superadmin" || user.role === "gestor";
+        const companyRole = selectedCompany.role;
+
+        let canManage =
+          isGestorOuAdmin &&
+          (user.role === "superadmin" ||
+            companyRole === "admin" ||
+            companyRole === "gestor");
 
         if (canManage) {
           sessionData.can_manage = true;
@@ -201,10 +205,17 @@ const handleWebhook = async (req, res) => {
             "UPDATE user_whatsapp_sessions SET step = 'AWAITING_DUE_DATE', data = ? WHERE user_id = ?",
             [JSON.stringify(sessionData), userId],
           );
+
+          let alertMsg = "";
+          if (user.role === "user") {
+            alertMsg =
+              "⚠️ *Aviso:* Como seu perfil é de colaborador, você só pode criar tarefas para você mesmo.\n\n";
+          }
+
           await sendReply(
             instanceName,
             remoteJid,
-            `📝 *Tarefa para você na empresa ${selectedCompany.name}.*\n\n📅 Qual a data de conclusão? (DD/MM ou "não")`,
+            `${alertMsg}📝 *Tarefa para você na empresa ${selectedCompany.name}.*\n\n📅 Qual a data de conclusão? (DD/MM ou "não")`,
           );
         }
         return res.sendStatus(200);
