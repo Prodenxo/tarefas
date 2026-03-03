@@ -120,5 +120,5 @@ const handleWebhook = async (req, res) => {
 
 // Usar r* para capturar qualquer sub-rota (ex: /whatsapp/connection-update)
 // Rota simples para evitar erros de sintaxe na Vercel
-router.post("/whatsapp", handleWebhook);
+router.post("/whatsapp*", handleWebhook);
 module.exports = router;
