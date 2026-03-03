@@ -153,13 +153,17 @@ const handleWebhook = async (req, res) => {
 
         let companyList = `👋 Olá ${user.name}!\n\n🏢 *Para qual empresa deseja criar a tarefa?*\n\n`;
         companies.forEach((c, idx) => {
-          const roleLabel =
-            user.role === "superadmin"
-              ? "Super Admin"
-              : c.company_role === "admin" || c.company_role === "gestor"
-                ? "Gestor"
-                : "Usuário";
-          companyList += `${idx + 1}. ${c.name} (${roleLabel})\n`;
+          let roleLabel = "";
+          if (user.role === "superadmin") {
+            roleLabel = " (Super Admin)";
+          } else if (
+            c.company_role === "admin" ||
+            c.company_role === "gestor"
+          ) {
+            roleLabel = " (Gestor)";
+          }
+
+          companyList += `${idx + 1}. ${c.name}${roleLabel}\n`;
         });
         companyList += "\n_Responda apenas com o número._";
 
