@@ -63,13 +63,19 @@ const handleWebhook = async (req, res) => {
         `[Webhook] Texto: "${text}" de: ${remoteJid} (fromMe: ${key.fromMe})`,
       );
 
-      // --- INÍCIO DO FLUXO CONVERSACIONAL ---
+      // --- INÍCIO DO FLUXO CONVERSACIONAL (VERSÃO 2.0 - IDENTIDADE POR NÚMERO) ---
+      const cleanRemoteJid = remoteJid.split("@")[0].replace(/\D/g, "");
+
+      // 1. IDENTIFICAR USUÁRIO PELO NÚMERO DE WHATSAPP
       const [users] = await pool.query(
-        "SELECT u.id, u.name, u.role, uc.company_id FROM users u LEFT JOIN user_companies uc ON u.id = uc.user_id WHERE LOWER(u.wa_instance) = LOWER(?) OR (u.wa_instance IS NULL AND u.id = 1) LIMIT 1",
-        [instanceName],
+        "SELECT id, name, role FROM users WHERE whatsapp_number = ? OR (wa_instance = ? AND whatsapp_number IS NULL) LIMIT 1",
+        [cleanRemoteJid, instanceName],
       );
 
       if (users.length === 0) {
+        console.log(
+          `[Webhook] Usuário não identificado para o número: ${cleanRemoteJid}`,
+        );
         return res.sendStatus(200);
       }
 
@@ -94,12 +100,14 @@ const handleWebhook = async (req, res) => {
 
         let companies = [];
         if (user.role === "superadmin") {
+          // Super Admin vê tudo
           [companies] = await pool.query(
             "SELECT id, name FROM companies WHERE active = 1",
           );
         } else {
+          // Gestor/Usuário vê as empresas onde tem vínculo
           [companies] = await pool.query(
-            "SELECT c.id, c.name FROM companies c JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ? AND c.active = 1",
+            "SELECT c.id, c.name, uc.role as company_role FROM companies c JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ? AND c.active = 1",
             [userId],
           );
         }
@@ -108,7 +116,7 @@ const handleWebhook = async (req, res) => {
           await sendReply(
             instanceName,
             remoteJid,
-            "❌ Você não tem acesso a nenhuma empresa ativa.",
+            "❌ Você não tem acesso a nenhuma empresa ativa vinculada ao seu número.",
           );
           return res.sendStatus(200);
         }
@@ -116,7 +124,11 @@ const handleWebhook = async (req, res) => {
         // Armazenar título e empresas na sessão
         const newSessionData = {
           title,
-          companies: companies.map((c) => ({ id: c.id, name: c.name })),
+          companies: companies.map((c) => ({
+            id: c.id,
+            name: c.name,
+            role: c.company_role,
+          })),
         };
         await pool.query(
           "INSERT INTO user_whatsapp_sessions (user_id, step, data) VALUES (?, 'AWAITING_COMPANY', ?) ON DUPLICATE KEY UPDATE step = 'AWAITING_COMPANY', data = ?",
@@ -127,9 +139,15 @@ const handleWebhook = async (req, res) => {
           ],
         );
 
-        let companyList = "🏢 *Para qual empresa deseja criar a tarefa?*\n\n";
+        let companyList = `👋 Olá ${user.name}!\n\n🏢 *Para qual empresa deseja criar a tarefa?*\n\n`;
         companies.forEach((c, idx) => {
-          companyList += `${idx + 1}. ${c.name}\n`;
+          const roleLabel =
+            user.role === "superadmin"
+              ? "Super Admin"
+              : c.company_role === "admin" || c.company_role === "gestor"
+                ? "Gestor"
+                : "Usuário";
+          companyList += `${idx + 1}. ${c.name} (${roleLabel})\n`;
         });
         companyList += "\n_Responda apenas com o número._";
 
@@ -158,14 +176,8 @@ const handleWebhook = async (req, res) => {
         // Validar Perfil na Empresa Escolhida
         let canManage = user.role === "superadmin";
         if (!canManage) {
-          const [roleCheck] = await pool.query(
-            "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ? LIMIT 1",
-            [userId, selectedCompany.id],
-          );
-          if (
-            roleCheck.length > 0 &&
-            (roleCheck[0].role === "admin" || roleCheck[0].role === "gestor")
-          ) {
+          const companyRole = selectedCompany.role;
+          if (companyRole === "admin" || companyRole === "gestor") {
             canManage = true;
           }
         }
@@ -179,7 +191,7 @@ const handleWebhook = async (req, res) => {
           await sendReply(
             instanceName,
             remoteJid,
-            `👤 *Para quem você deseja delegar a tarefa na empresa ${selectedCompany.name}?*\n\nDigite o nome da pessoa ou mande "eu" para você mesmo.`,
+            `👤 *Como você é Gestor na ${selectedCompany.name}, para quem deseja delegar?*\n\nDigite o nome ou "eu".`,
           );
         } else {
           sessionData.can_manage = false;
@@ -192,7 +204,7 @@ const handleWebhook = async (req, res) => {
           await sendReply(
             instanceName,
             remoteJid,
-            `📅 *Qual a data de conclusão?*\n\nExemplo: 25/12 ou 05/03.\nDigite "não" se não tiver data.`,
+            `📝 *Tarefa para você na empresa ${selectedCompany.name}.*\n\n📅 Qual a data de conclusão? (DD/MM ou "não")`,
           );
         }
         return res.sendStatus(200);
