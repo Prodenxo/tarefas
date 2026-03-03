@@ -4,19 +4,13 @@ const pool = require("../config/database");
 const fs = require("fs");
 const path = require("path");
 
-const logWebhook = (data) => {
-  const logPath = path.join(__dirname, "../../webhook_debug.log");
-  const timestamp = new Date().toISOString();
-  fs.appendFileSync(
-    logPath,
-    `\n[${timestamp}] ${JSON.stringify(data, null, 2)}\n`,
-  );
-};
-
 const handleWebhook = async (req, res) => {
   try {
     const payload = req.body;
-    logWebhook(payload);
+    console.log(
+      "[Webhook Debug] Payload recebido:",
+      JSON.stringify(payload, null, 2),
+    );
     const { event, instance, data } = payload;
     // Algumas versões da Evolution mandam "nome:token" no campo instance
     const instanceName = instance ? instance.split(":")[0] : null;
