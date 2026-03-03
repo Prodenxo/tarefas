@@ -48,10 +48,7 @@ const handleWebhook = async (req, res) => {
       const message = data.message || {};
       const remoteJid = key.remoteJid || "";
 
-      // Evitar loops: não processa se a mensagem foi enviada por mim mesmo
-      if (key.fromMe) return res.sendStatus(200);
-
-      // Tentar capturar texto de diversas formas (Texto simples, Texto estendido, Legenda de imagem/vídeo)
+      // Capturar texto de diversas formas
       let text =
         message.conversation ||
         message.extendedTextMessage?.text ||
@@ -59,36 +56,18 @@ const handleWebhook = async (req, res) => {
         message.videoMessage?.caption ||
         "";
 
-      // Se não houver texto, verificar se a Evolution API já forneceu transcrição em algum campo customizado
       if (!text && data.message && typeof data.message === "string")
         text = data.message;
 
-      // Se for apenas áudio sem transcrição ainda
-      const isAudio = !!message.audioMessage;
-
-      if (!text && isAudio) {
-        console.log(`[Webhook] Áudio recebido de ${remoteJid}.`);
-        // Aqui poderíamos integrar com Whisper futuramente se necessário
-        await sendReply(
-          instanceName,
-          remoteJid,
-          "🎙️ *Recebi seu áudio!* Por favor, mande o comando escrito `create [título]` ou aguarde a implementação da transcrição automática.",
-        );
-        return res.sendStatus(200);
-      }
-
-      if (!text) return res.sendStatus(200);
-
-      console.log(`[Webhook] Texto detectado: "${text}" de: ${remoteJid}`);
+      console.log(
+        `[Webhook] Texto: "${text}" de: ${remoteJid} (fromMe: ${key.fromMe})`,
+      );
 
       // COMANDO: create [Título da Tarefa]
       const match = text.trim().match(/^create\s+(.*)$/i);
       if (match) {
         const title = match[1].trim() || "Nova tarefa via WhatsApp";
 
-        // Localizar o usuário vinculado a esta instância de WhatsApp
-        // Se a instância for "zap", buscamos quem tem wa_instance = "zap"
-        // Como fallback, tentamos id=1 (o primeiro admin) se não houver vínculo específico
         const [users] = await pool.query(
           "SELECT id, company_id, name FROM users WHERE LOWER(wa_instance) = LOWER(?) OR (wa_instance IS NULL AND id = 1) LIMIT 1",
           [instanceName],
@@ -97,7 +76,7 @@ const handleWebhook = async (req, res) => {
         if (users.length > 0) {
           const user = users[0];
 
-          await pool.query(
+          const [result] = await pool.query(
             "INSERT INTO tasks (company_id, created_by_user_id, title, status, description) VALUES (?, ?, ?, 'Pendente', ?)",
             [
               user.company_id || 1,
@@ -108,23 +87,25 @@ const handleWebhook = async (req, res) => {
           );
 
           console.log(
-            `[Webhook] SUCESSO: Tarefa "${title}" criada para ${user.name}`,
+            `[Webhook] SUCESSO: Tarefa #${result.insertId} criada para ${user.name}`,
           );
 
-          // Responder ao usuário no WhatsApp com confirmação
-          await sendReply(
-            instanceName,
-            remoteJid,
-            `✅ *Tarefa registrada com sucesso!* \n\n📌 *Título:* ${title}\n👤 *Para:* ${user.name}\n🚀 *Status:* Pendente\n\n_Para ver na plataforma, acesse o painel._`,
-          );
+          // Tentar responder, mas não falhar o webhook se a API estiver inacessível
+          try {
+            await sendReply(
+              instanceName,
+              remoteJid,
+              `✅ *Tarefa registrada!* \n\n📌 *ID:* ${result.insertId}\n📌 *Título:* ${title}\n👤 *Para:* ${user.name}\n🚀 *Status:* Pendente`,
+            );
+          } catch (replyErr) {
+            console.error(
+              "[Webhook] Falha ao enviar resposta (URL da API inacessível):",
+              replyErr.message,
+            );
+          }
         } else {
           console.log(
-            `[Webhook] ERRO: Nenhuma conta vinculada à instância "${instanceName}"`,
-          );
-          await sendReply(
-            instanceName,
-            remoteJid,
-            `⚠️ *Erro de Configuração:* Sua conta de WhatsApp não está vinculada a nenhum usuário no Gestor de Tarefas.`,
+            `[Webhook] ERRO: Sem usuário para instância "${instanceName}"`,
           );
         }
       }
@@ -132,7 +113,7 @@ const handleWebhook = async (req, res) => {
 
     res.sendStatus(200);
   } catch (error) {
-    console.error("[Webhook] ERRO CRÍTICO NO WEBHOOK:", error);
+    console.error("[Webhook] ERRO CRÍTICO:", error);
     res.status(500).json({ error: error.message });
   }
 };
