@@ -169,14 +169,8 @@ const handleWebhook = async (req, res) => {
         companies.forEach((c, idx) => {
           let roleLabel = "";
           if (user.role === "superadmin") {
-            roleLabel = " (Super Admin)";
-          } else if (
-            c.company_role === "admin" ||
-            c.company_role === "gestor"
-          ) {
-            roleLabel = " (Gestor)";
+            roleLabel = " (Admin)";
           }
-
           companyList += `${idx + 1}. ${c.name}${roleLabel}\n`;
         });
         companyList += "\n_Responda com o número ou *0* para cancelar._";
@@ -221,11 +215,10 @@ const handleWebhook = async (req, res) => {
             [JSON.stringify(sessionData), userId],
           );
 
-          const gestorLabel = isAdminGlobal ? "Super Admin" : "Gestor";
           await sendReply(
             instanceName,
             remoteJid,
-            `👤 *Perfil ${gestorLabel} na empresa ${selectedCompany.name}.*\n\nPara quem deseja delegar esta tarefa? (Digite o nome, "eu" ou *0* para cancelar)`,
+            `👥 *Delegar tarefa na empresa ${selectedCompany.name}:*\n\nPara quem você deseja enviar? (Nome, "eu" ou *0* para cancelar)`,
           );
         } else {
           sessionData.can_manage = false;
