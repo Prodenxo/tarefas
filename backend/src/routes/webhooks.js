@@ -189,18 +189,12 @@ const handleWebhook = async (req, res) => {
         sessionData.company_id = selectedCompany.id;
         sessionData.company_name = selectedCompany.name;
 
-        // Validar Perfil na Empresa Escolhida (VERSÃO 2.2 - TRAVA DE SEGURANÇA GLOBAL)
-        // Regra: Apenas Superadmin ou Gestores Globais podem delegar.
-        // Usuários comuns (role: 'user') sempre criam para si mesmos.
-        const isGestorOuAdmin =
-          user.role === "superadmin" || user.role === "gestor";
+        // Regra: Apenas Superadmin ou Gestores daquela empresa específica podem delegar.
+        const isAdminGlobal = user.role === "superadmin";
         const companyRole = selectedCompany.role;
 
         let canManage =
-          isGestorOuAdmin &&
-          (user.role === "superadmin" ||
-            companyRole === "admin" ||
-            companyRole === "gestor");
+          isAdminGlobal || companyRole === "admin" || companyRole === "gestor";
 
         if (canManage) {
           sessionData.can_manage = true;
@@ -208,10 +202,12 @@ const handleWebhook = async (req, res) => {
             "UPDATE user_whatsapp_sessions SET step = 'AWAITING_ASSIGNEE', data = ? WHERE user_id = ?",
             [JSON.stringify(sessionData), userId],
           );
+
+          const gestorLabel = isAdminGlobal ? "Super Admin" : "Gestor";
           await sendReply(
             instanceName,
             remoteJid,
-            `👤 *Como você é Gestor na ${selectedCompany.name}, para quem deseja delegar?*\n\nDigite o nome ou "eu".`,
+            `👤 *Perfil ${gestorLabel} na empresa ${selectedCompany.name}.*\n\nPara quem deseja delegar esta tarefa? (Digite o nome ou "eu")`,
           );
         } else {
           sessionData.can_manage = false;
@@ -222,16 +218,10 @@ const handleWebhook = async (req, res) => {
             [JSON.stringify(sessionData), userId],
           );
 
-          let alertMsg = "";
-          if (user.role === "user") {
-            alertMsg =
-              "⚠️ *Aviso:* Como seu perfil é de colaborador, você só pode criar tarefas para você mesmo.\n\n";
-          }
-
           await sendReply(
             instanceName,
             remoteJid,
-            `${alertMsg}📝 *Tarefa para você na empresa ${selectedCompany.name}.*\n\n📅 Qual a data de conclusão? (DD/MM ou "não")`,
+            `📝 *Tarefa para você na empresa ${selectedCompany.name}.*\n\n📅 Qual a data de conclusão? (DD/MM ou "não")`,
           );
         }
         return res.sendStatus(200);
