@@ -69,10 +69,11 @@ const handleWebhook = async (req, res) => {
       // --- INÍCIO DO FLUXO CONVERSACIONAL (VERSÃO 2.1 - IDENTIDADE ROBUSTA) ---
       const cleanRemoteJid = remoteJid.split("@")[0].replace(/\D/g, "");
 
-      // 1. IDENTIFICAR USUÁRIO PELO NÚMERO DE WHATSAPP (Busca flexível para DDD+Número ou 55+DDD+Número)
+      // 1. IDENTIFICAR USUÁRIO ESTREITAMENTE PELO NÚMERO DE WHATSAPP
+      // Removida identificação por instância para evitar que números não vinculados caiam em perfis de Admin/Gestor padrão.
       const [users] = await pool.query(
-        "SELECT id, name, role FROM users WHERE (? LIKE CONCAT('%', whatsapp_number) AND whatsapp_number IS NOT NULL AND whatsapp_number != '') OR (wa_instance = ? AND whatsapp_number IS NULL) LIMIT 1",
-        [cleanRemoteJid, instanceName],
+        "SELECT id, name, role FROM users WHERE ? LIKE CONCAT('%', whatsapp_number) AND whatsapp_number IS NOT NULL AND whatsapp_number != '' LIMIT 1",
+        [cleanRemoteJid],
       );
 
       if (users.length === 0) {
@@ -197,13 +198,19 @@ const handleWebhook = async (req, res) => {
         sessionData.company_id = selectedCompany.id;
         sessionData.company_name = selectedCompany.name;
 
-        // Regra Rigorosa: Apenas Superadmin ou Gestores daquela empresa específica podem delegar.
+        // Regra Rigorosa: Buscar papel REAL no banco agora para evitar cache ou erro de sessão
+        const [roles] = await pool.query(
+          "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ? LIMIT 1",
+          [userId, selectedCompany.id],
+        );
+        const actualCompanyRole = (roles[0]?.role || "").toLowerCase();
         const isAdminGlobal = (user.role || "").toLowerCase() === "superadmin";
-        const companyRole = (selectedCompany.role || "").toLowerCase();
 
-        // O papel global "gestor" não dá poder automático, apenas o papel LOCAL na empresa (admin ou gestor) ou ser Superadmin.
+        // Só pode delegar se for Admin Global ou tiver papel de 'admin'/'gestor' NESTA empresa.
         let canManage =
-          isAdminGlobal || companyRole === "admin" || companyRole === "gestor";
+          isAdminGlobal ||
+          actualCompanyRole === "admin" ||
+          actualCompanyRole === "gestor";
 
         if (canManage) {
           sessionData.can_manage = true;
