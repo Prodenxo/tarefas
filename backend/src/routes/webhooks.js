@@ -204,16 +204,16 @@ const handleWebhook = async (req, res) => {
           [userId, selectedCompany.id],
         );
 
-        const localRole = (roles[0]?.role || "").toLowerCase();
-        const isAdminGlobal = (user.role || "").toLowerCase() === "superadmin";
+        const localRole = (roles[0]?.role || "").toLowerCase().trim();
+        const isAdminGlobal =
+          (user.role || "").toLowerCase().trim() === "superadmin";
 
-        // SÓ pode delegar se for SuperAdmin GLOBAL ou se o cargo LOCAL na empresa for 'admin' ou 'gestor'.
-        // Qualquer outro cargo (user, colab, etc) cai no fluxo de "Criar para si mesmo".
+        // Regra Dinâmica: Delegar só se for Gestor/Admin Local ou Admin Global
         let canManage =
           isAdminGlobal || localRole === "admin" || localRole === "gestor";
 
         console.log(
-          `[Segurança] User: ${user.name}, Empresa: ${selectedCompany.id}, Role Local: ${localRole}, Pode Delegar: ${canManage}`,
+          `[DINÂMICO] User: ${user.name} | Empresa: ${selectedCompany.name} | Role Local: "${localRole}" | Pode Delegar? ${canManage}`,
         );
 
         if (canManage) {
