@@ -105,7 +105,21 @@ const handleWebhook = async (req, res) => {
           ? JSON.parse(session.data)
           : session.data || {};
 
-      // 1. INICIAR COMANDO (create)
+      // 1. COMANDO DE CANCELAMENTO (0)
+      if (text.trim() === "0" && session.step !== "NONE") {
+        await pool.query(
+          "DELETE FROM user_whatsapp_sessions WHERE user_id = ?",
+          [userId],
+        );
+        await sendReply(
+          instanceName,
+          remoteJid,
+          "❌ *Criação de tarefa cancelada.*",
+        );
+        return res.sendStatus(200);
+      }
+
+      // 2. INICIAR COMANDO (create)
       const createMatch = text.trim().match(/^create\s*(.*)$/i);
       if (createMatch) {
         const title = createMatch[1].trim() || "Nova tarefa";
@@ -165,7 +179,7 @@ const handleWebhook = async (req, res) => {
 
           companyList += `${idx + 1}. ${c.name}${roleLabel}\n`;
         });
-        companyList += "\n_Responda apenas com o número._";
+        companyList += "\n_Responda com o número ou *0* para cancelar._";
 
         await sendReply(instanceName, remoteJid, companyList);
         return res.sendStatus(200);
@@ -207,7 +221,7 @@ const handleWebhook = async (req, res) => {
           await sendReply(
             instanceName,
             remoteJid,
-            `👤 *Perfil ${gestorLabel} na empresa ${selectedCompany.name}.*\n\nPara quem deseja delegar esta tarefa? (Digite o nome ou "eu")`,
+            `👤 *Perfil ${gestorLabel} na empresa ${selectedCompany.name}.*\n\nPara quem deseja delegar esta tarefa? (Digite o nome, "eu" ou *0* para cancelar)`,
           );
         } else {
           sessionData.can_manage = false;
@@ -221,7 +235,7 @@ const handleWebhook = async (req, res) => {
           await sendReply(
             instanceName,
             remoteJid,
-            `📝 *Tarefa para você na empresa ${selectedCompany.name}.*\n\n📅 Qual a data de conclusão? (DD/MM ou "não")`,
+            `📝 *Tarefa para você na empresa ${selectedCompany.name}.*\n\n📅 Qual a data de conclusão? (DD/MM, "não" ou *0* para cancelar)`,
           );
         }
         return res.sendStatus(200);
