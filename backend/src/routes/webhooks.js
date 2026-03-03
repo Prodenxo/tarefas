@@ -119,5 +119,5 @@ const handleWebhook = async (req, res) => {
 };
 
 // Usar r* para capturar qualquer sub-rota (ex: /whatsapp/connection-update)
-router.post("/whatsapp(.*)", handleWebhook);
+router.post("/whatsapp", handleWebhook);
 module.exports = router;
