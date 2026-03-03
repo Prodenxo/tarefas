@@ -71,7 +71,7 @@ const handleWebhook = async (req, res) => {
 
       // 1. IDENTIFICAR USUÁRIO PELO NÚMERO DE WHATSAPP (Busca flexível para DDD+Número ou 55+DDD+Número)
       const [users] = await pool.query(
-        "SELECT id, name, role FROM users WHERE ? LIKE CONCAT('%', whatsapp_number) AND whatsapp_number IS NOT NULL AND whatsapp_number != '' OR (wa_instance = ? AND whatsapp_number IS NULL) LIMIT 1",
+        "SELECT id, name, role FROM users WHERE (? LIKE CONCAT('%', whatsapp_number) AND whatsapp_number IS NOT NULL AND whatsapp_number != '') OR (wa_instance = ? AND whatsapp_number IS NULL) LIMIT 1",
         [cleanRemoteJid, instanceName],
       );
 
@@ -205,7 +205,11 @@ const handleWebhook = async (req, res) => {
 
         // Regra: Apenas Superadmin ou Gestores daquela empresa específica podem delegar.
         const isAdminGlobal = user.role === "superadmin";
-        const companyRole = selectedCompany.role;
+        const companyRole = (selectedCompany.role || "").toLowerCase();
+
+        console.log(
+          `[Webhook] Verificando Permissão: User=${user.name} (Global:${user.role}), Empresa=${selectedCompany.name} (Local:${companyRole})`,
+        );
 
         let canManage =
           isAdminGlobal || companyRole === "admin" || companyRole === "gestor";
