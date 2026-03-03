@@ -30,7 +30,7 @@ const handleWebhook = async (req, res) => {
   try {
     const payload = req.body;
     const event = (payload.event || "").toLowerCase().replace("_", ".");
-    const instanceRaw = payload.instance || "zap";
+    const instanceRaw = payload.instance || "ofc";
     const instanceName = instanceRaw.split(":")[0];
 
     // Ignorar eventos irrelevantes para economizar log
@@ -120,5 +120,5 @@ const handleWebhook = async (req, res) => {
 
 // Usar r* para capturar qualquer sub-rota (ex: /whatsapp/connection-update)
 // Rota simples para evitar erros de sintaxe na Vercel
-router.post("/whatsapp(.*)", handleWebhook);
+router.post("/whatsapp", handleWebhook);
 module.exports = router;
