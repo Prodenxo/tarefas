@@ -69,7 +69,7 @@ const handleWebhook = async (req, res) => {
         const title = match[1].trim() || "Nova tarefa via WhatsApp";
 
         const [users] = await pool.query(
-          "SELECT id, company_id, name FROM users WHERE LOWER(wa_instance) = LOWER(?) OR (wa_instance IS NULL AND id = 1) LIMIT 1",
+          "SELECT u.id, u.name, uc.company_id FROM users u LEFT JOIN user_companies uc ON u.id = uc.user_id WHERE LOWER(u.wa_instance) = LOWER(?) OR (u.wa_instance IS NULL AND u.id = 1) LIMIT 1",
           [instanceName],
         );
 
@@ -77,13 +77,8 @@ const handleWebhook = async (req, res) => {
           const user = users[0];
 
           const [result] = await pool.query(
-            "INSERT INTO tasks (company_id, created_by_user_id, title, status, description) VALUES (?, ?, ?, 'Pendente', ?)",
-            [
-              user.company_id || 1,
-              user.id,
-              `[Zap] ${title}`,
-              `Criada via WhatsApp por "${user.name}" (${remoteJid})`,
-            ],
+            "INSERT INTO tasks (company_id, created_by_user_id, title, status) VALUES (?, ?, ?, 'Iniciada')",
+            [user.company_id || 1, user.id, `[Zap] ${title}`],
           );
 
           console.log(
