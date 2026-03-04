@@ -116,15 +116,18 @@ router.get("/:id/users", async (req, res) => {
 router.post("/:id/users", async (req, res) => {
   try {
     const { id } = req.params; // company_id
-    const { userId } = req.body;
+    const { userId, role } = req.body;
 
     // Permissão: Superadmin ou Gestor vinculado à empresa
     if (req.user.role !== "superadmin") {
       const [check] = await pool.query(
-        "SELECT * FROM user_companies WHERE user_id = ? AND company_id = ?",
+        "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ?",
         [req.user.id, id],
       );
-      if (check.length === 0 || req.user.role !== "gestor") {
+      if (
+        check.length === 0 ||
+        (check[0].role !== "gestor" && check[0].role !== "admin")
+      ) {
         return res.status(403).json({
           message:
             "Acesso negado. Apenas Gestores desta empresa ou Superadmins podem vincular usuários.",
@@ -133,10 +136,43 @@ router.post("/:id/users", async (req, res) => {
     }
 
     await pool.query(
-      "INSERT INTO user_companies (user_id, company_id) VALUES (?, ?)",
-      [userId, id],
+      "INSERT INTO user_companies (user_id, company_id, role) VALUES (?, ?, ?)",
+      [userId, id, role || "user"],
     );
     res.status(201).json({ message: "Usuário vinculado com sucesso" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Atualizar cargo do usuário na empresa
+router.put("/:id/users/:userId/role", async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const { role } = req.body;
+
+    // Permissão: Superadmin ou Gestor vinculado à empresa
+    if (req.user.role !== "superadmin") {
+      const [check] = await pool.query(
+        "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ?",
+        [req.user.id, id],
+      );
+      if (
+        check.length === 0 ||
+        (check[0].role !== "gestor" && check[0].role !== "admin")
+      ) {
+        return res.status(403).json({
+          message:
+            "Acesso negado. Apenas Gestores desta empresa ou Superadmins podem alterar cargos.",
+        });
+      }
+    }
+
+    await pool.query(
+      "UPDATE user_companies SET role = ? WHERE user_id = ? AND company_id = ?",
+      [role || "user", userId, id],
+    );
+    res.json({ message: "Cargo atualizado com sucesso" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

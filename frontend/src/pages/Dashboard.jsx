@@ -437,17 +437,27 @@ export default function Dashboard() {
     }
   };
 
-  const handleUpdateUserRole = async (userId, newRole) => {
+  const handleUpdateUserRole = async (userId, newRole, companyId = null) => {
     const u = allUsers.find(user => user.id === userId);
     try {
-      await axios.put(`${apiUrl}/users/${userId}`, { 
-        name: u.name,
-        email: u.email,
-        active: u.active,
-        role: newRole 
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      if (companyId) {
+        // Atualiza cargo LOCAL (na empresa)
+        await axios.put(`${apiUrl}/companies/${companyId}/users/${userId}/role`, { 
+          role: newRole 
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else {
+        // Atualiza cargo GLOBAL
+        await axios.put(`${apiUrl}/users/${userId}`, { 
+          name: u.name,
+          email: u.email,
+          active: u.active,
+          role: newRole 
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
       showToast("Papel alterado com sucesso!");
       fetchAllDataForSuperadmin();
     } catch (err) {
@@ -939,10 +949,10 @@ export default function Dashboard() {
                                 options={[
                                   { value: 'user', label: 'Colaborador' },
                                   { value: 'gestor', label: 'Gestor' },
-                                  ...(user.role === 'superadmin' ? [{ value: 'superadmin', label: 'Superadmin' }] : [])
+                                  { value: 'admin', label: 'Admin Local' }
                                 ]}
-                                selected={u.role}
-                                onChange={(newRole) => handleUpdateUserRole(u.id, newRole)}
+                                selected={u.currentLinks.find(l => l.id === selectedCompany.id)?.role || 'user'}
+                                onChange={(newRole) => handleUpdateUserRole(u.id, newRole, selectedCompany.id)}
                               />
                             )}
                           </td>

@@ -24,7 +24,7 @@ router.get("/", async (req, res) => {
         SELECT 
           u.id, u.name, u.email, u.role, u.active, u.wa_instance, u.whatsapp_number, u.created_at,
           JSON_ARRAYAGG(
-            JSON_OBJECT('id', c.id, 'name', c.name)
+            JSON_OBJECT('id', c.id, 'name', c.name, 'role', uc.role)
           ) as linked_companies
         FROM users u
         INNER JOIN user_companies uc_filter ON u.id = uc_filter.user_id
@@ -42,7 +42,7 @@ router.get("/", async (req, res) => {
         SELECT 
           u.id, u.name, u.email, u.role, u.active, u.wa_instance, u.whatsapp_number, u.created_at,
           JSON_ARRAYAGG(
-            JSON_OBJECT('id', c.id, 'name', c.name)
+            JSON_OBJECT('id', c.id, 'name', c.name, 'role', uc.role)
           ) as linked_companies
         FROM users u
         LEFT JOIN user_companies uc ON u.id = uc.user_id
