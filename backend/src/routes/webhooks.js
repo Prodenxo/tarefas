@@ -80,7 +80,21 @@ const handleWebhook = async (req, res) => {
           } catch (e) {}
 
           if (text) {
-            console.log(`[Webhook] Transcrição concluída: "${text}"`);
+            // LIMPEZA PÓS-TRANSCRIÇÃO: Remove pontos finais, exclamações e espaços extras que o Whisper coloca
+            text = text.replace(/[.!?;]/g, "").trim();
+
+            // Converte números por extenso básicos (comum no Whisper)
+            const numMap = {
+              um: "1",
+              dois: "2",
+              três: "3",
+              quatro: "4",
+              cinco: "5",
+            };
+            const lowerText = text.toLowerCase();
+            if (numMap[lowerText]) text = numMap[lowerText];
+
+            console.log(`[Webhook] Transcrição limpa: "${text}"`);
           }
         } catch (err) {
           console.error(
@@ -151,9 +165,11 @@ const handleWebhook = async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // 2. INICIAR COMANDO (create)
-      const createMatch = text.trim().match(/^(?:create|criar)\s*(.*)$/i);
-      if (createMatch) {
+      // 2. INICIAR COMANDO (create/criar) - Mais sensível
+      const lowerText = text.toLowerCase().trim();
+      const createMatch = lowerText.match(/(?:create|criar)\s*(.*)$/i);
+
+      if (createMatch && session.step === "NONE") {
         let title = createMatch[1].trim();
         // Se a pessoa digitou apenas "criar", o título deve ser o próximo input ou "Nova tarefa"
         if (!title) title = "Nova tarefa";
