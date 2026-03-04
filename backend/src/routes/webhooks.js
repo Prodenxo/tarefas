@@ -113,7 +113,7 @@ const handleWebhook = async (req, res) => {
         );
 
         // Só responde se a pessoa estiver tentando usar o comando "create"
-        if (text.trim().match(/^create\s*(.*)$/i)) {
+        if (text.trim().match(/^(create|criar)\s*(.*)$/i)) {
           await sendReply(
             instanceName,
             remoteJid,
@@ -152,7 +152,7 @@ const handleWebhook = async (req, res) => {
       }
 
       // 2. INICIAR COMANDO (create)
-      const createMatch = text.trim().match(/^create\s*(.*)$/i);
+      const createMatch = text.trim().match(/^(create|criar)\s*(.*)$/i);
       if (createMatch) {
         const title = createMatch[1].trim() || "Nova tarefa";
 
