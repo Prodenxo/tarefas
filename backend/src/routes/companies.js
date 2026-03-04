@@ -151,30 +151,45 @@ router.put("/:id/users/:userId/role", async (req, res) => {
     const { id, userId } = req.params;
     const { role } = req.body;
 
-    // Permissão: Superadmin ou Gestor vinculado à empresa
+    console.log(
+      `[DEBUG] Alterando role - Empresa: ${id}, Usuário: ${userId}, Nova Role: ${role}`,
+    );
+
+    // Permissão: Superadmin Global tem passe livre
     if (req.user.role !== "superadmin") {
       const [check] = await pool.query(
         "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ?",
         [req.user.id, id],
       );
-      if (
-        check.length === 0 ||
-        (check[0].role !== "gestor" && check[0].role !== "admin")
-      ) {
+
+      const userLocalRole =
+        check.length > 0 ? (check[0].role || "").toLowerCase() : "";
+      const canEdit = userLocalRole === "gestor" || userLocalRole === "admin";
+
+      if (!canEdit) {
         return res.status(403).json({
           message:
-            "Acesso negado. Apenas Gestores desta empresa ou Superadmins podem alterar cargos.",
+            "Acesso negado. Apenas Gestores locais ou Superadmins podem alterar cargos.",
         });
       }
     }
 
+    // Executa o update com os valores higienizados
+    const cleanRole = (role || "user").toLowerCase();
     await pool.query(
       "UPDATE user_companies SET role = ? WHERE user_id = ? AND company_id = ?",
-      [role || "user", userId, id],
+      [cleanRole, userId, id],
     );
+
     res.json({ message: "Cargo atualizado com sucesso" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("[CATASTRÓFICO] Erro ao mudar role:", error);
+    res
+      .status(500)
+      .json({
+        error: "Erro interno ao atualizar cargo",
+        details: error.message,
+      });
   }
 });
 
