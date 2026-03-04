@@ -6,7 +6,7 @@ const app = express();
 // Liberação de CORS para permitir acesso de qualquer origem
 app.use(
   cors({
-    origin: "*", // Permite qualquer origem de forma explícita
+    origin: "https://tarefas-one.vercel.app", // Define a origem exata para evitar bloqueios do Proxy
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -14,7 +14,6 @@ app.use(
       "X-Requested-With",
       "Accept",
     ],
-    exposedHeaders: ["Content-Length", "X-Foo", "X-Bar"],
     credentials: true,
   }),
 );
