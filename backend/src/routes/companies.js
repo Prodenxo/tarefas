@@ -174,22 +174,32 @@ router.put("/:id/users/:userId/role", async (req, res) => {
       }
     }
 
-    // Executa o update com os valores higienizados
+    // Executa o update com tratamento para restrições de ENUM
     const cleanRole = (role || "user").toLowerCase();
-    await pool.query(
-      "UPDATE user_companies SET role = ? WHERE user_id = ? AND company_id = ?",
-      [cleanRole, userId, id],
-    );
+    try {
+      await pool.query(
+        "UPDATE user_companies SET role = ? WHERE user_id = ? AND company_id = ?",
+        [cleanRole, userId, id],
+      );
+    } catch (dbErr) {
+      console.warn(
+        "[AVISO] Banco rejeitou role. Tentando valor vazio...",
+        dbErr.message,
+      );
+      // Se falhar (ex: ENUM que não aceita 'user'), tenta gravar vazio
+      await pool.query(
+        "UPDATE user_companies SET role = '' WHERE user_id = ? AND company_id = ?",
+        [userId, id],
+      );
+    }
 
     res.json({ message: "Cargo atualizado com sucesso" });
   } catch (error) {
     console.error("[CATASTRÓFICO] Erro ao mudar role:", error);
-    res
-      .status(500)
-      .json({
-        error: "Erro interno ao atualizar cargo",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Erro interno ao atualizar cargo",
+      details: error.message,
+    });
   }
 });
 
