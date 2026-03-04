@@ -152,9 +152,11 @@ const handleWebhook = async (req, res) => {
       }
 
       // 2. INICIAR COMANDO (create)
-      const createMatch = text.trim().match(/^(create|criar)\s*(.*)$/i);
+      const createMatch = text.trim().match(/^(?:create|criar)\s*(.*)$/i);
       if (createMatch) {
-        const title = createMatch[1].trim() || "Nova tarefa";
+        let title = createMatch[1].trim();
+        // Se a pessoa digitou apenas "criar", o título deve ser o próximo input ou "Nova tarefa"
+        if (!title) title = "Nova tarefa";
 
         let companies = [];
         if (user.is_superadmin) {
@@ -334,7 +336,7 @@ const handleWebhook = async (req, res) => {
             const month = dateMatch[2].padStart(2, "0");
             const year = dateMatch[3] || new Date().getFullYear();
             dueDate = `${year}-${month}-${day}`;
-            dueDateFormatted = `${day}/${month}`;
+            dueDateFormatted = `${day}/${month}/${year}`;
           } else {
             await sendReply(
               instanceName,
@@ -353,7 +355,7 @@ const handleWebhook = async (req, res) => {
             userId,
             sessionData.assigned_to_id,
             `[Zap] ${sessionData.title}`,
-            dueDate,
+            dueDate ? `${dueDate} 12:00:00` : null,
           ],
         );
 
