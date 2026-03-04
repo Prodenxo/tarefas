@@ -156,7 +156,21 @@ router.put("/:id", async (req, res) => {
     const { is_superadmin } = req.body;
 
     if (is_superadmin !== undefined && is_superadmin !== null) {
-      if (isSuper) {
+      // Busca o valor atual no banco para comparar
+      const [currentUser] = await pool.query(
+        "SELECT is_superadmin FROM users WHERE id = ?",
+        [id],
+      );
+      const currentIsSuper = currentUser[0]?.is_superadmin;
+
+      if (parseInt(is_superadmin) !== parseInt(currentIsSuper)) {
+        if (!isSuper) {
+          return res.status(403).json({
+            message:
+              "Apenas Super Admins podem alterar o status de Super Admin.",
+          });
+        }
+        // Se for super, prepara a query com o novo valor
         updateQuery =
           "UPDATE users SET name = ?, email = ?, active = ?, is_superadmin = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
         params = [
@@ -168,10 +182,6 @@ router.put("/:id", async (req, res) => {
           whatsapp_number || null,
           id,
         ];
-      } else {
-        return res.status(403).json({
-          message: "Apenas Super Admins podem alterar o status de Super Admin.",
-        });
       }
     }
 
