@@ -80,21 +80,47 @@ const handleWebhook = async (req, res) => {
           } catch (e) {}
 
           if (text) {
-            // LIMPEZA PÓS-TRANSCRIÇÃO: Remove pontos finais, exclamações e espaços extras que o Whisper coloca
-            text = text.replace(/[.!?;]/g, "").trim();
+            // 1. LIMPEZA TOTAL: Remove pontuação indesejada (pontos, vírgulas, exclamações no final)
+            text = text.replace(/[.!?,;]+$/g, "").trim();
 
-            // Converte números por extenso básicos (comum no Whisper)
+            // 2. NORMALIZAÇÃO DE DATAS FALADAS (Ex: "05 barra 03" ou "05 de março")
+            text = text
+              .toLowerCase()
+              .replace(/\s+barra\s+/g, "/")
+              .replace(/\s+de\s+/g, "/")
+              .replace(/\s+do\s+/g, "/")
+              .replace(/janeiro/g, "01")
+              .replace(/fevereiro/g, "02")
+              .replace(/março/g, "03")
+              .replace(/abril/g, "04")
+              .replace(/maio/g, "05")
+              .replace(/junho/g, "06")
+              .replace(/julho/g, "07")
+              .replace(/agosto/g, "08")
+              .replace(/setembro/g, "09")
+              .replace(/outubro/g, "10")
+              .replace(/novembro/g, "11")
+              .replace(/dezembro/g, "12");
+
+            // 3. CONVERSÃO DE NÚMEROS POR EXTENSO
             const numMap = {
               um: "1",
               dois: "2",
               três: "3",
               quatro: "4",
               cinco: "5",
+              seis: "6",
+              sete: "7",
+              oito: "8",
+              nove: "9",
+              dez: "10",
             };
-            const lowerText = text.toLowerCase();
-            if (numMap[lowerText]) text = numMap[lowerText];
+            Object.keys(numMap).forEach((key) => {
+              const regex = new RegExp(`\\b${key}\\b`, "g");
+              text = text.replace(regex, numMap[key]);
+            });
 
-            console.log(`[Webhook] Transcrição limpa: "${text}"`);
+            console.log(`[Webhook] Transcrição normalizada: "${text}"`);
           }
         } catch (err) {
           console.error(
@@ -231,7 +257,9 @@ const handleWebhook = async (req, res) => {
 
       // 2. PROCESSAR RESPOSTAS DO FLUXO
       if (session.step === "AWAITING_COMPANY") {
-        const index = parseInt(text.trim()) - 1;
+        // Extrai o primeiro número encontrado no texto (ajuda se o Whisper disser "Opção 1" ou "Número 1")
+        const numberMatch = text.match(/\d+/);
+        const index = numberMatch ? parseInt(numberMatch[0]) - 1 : -1;
         const companies = sessionData.companies || [];
 
         if (isNaN(index) || !companies[index]) {
@@ -339,13 +367,14 @@ const handleWebhook = async (req, res) => {
       }
 
       if (session.step === "AWAITING_DUE_DATE") {
-        const input = text.trim();
+        const input = text.trim().toLowerCase();
         let dueDate = null;
         let dueDateFormatted = "Sem data";
 
-        if (input.toLowerCase() !== "não" && input.toLowerCase() !== "nao") {
+        if (input !== "não" && input !== "nao") {
+          // RegEx melhorado para aceitar: DD/MM, DD-MM, DD.MM ou DD MM (espaço)
           const dateMatch = input.match(
-            /(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/,
+            /(\d{1,2})[\/\-\.\s](\d{1,2})(?:[\/\-\.\s](\d{2,4}))?/,
           );
           if (dateMatch) {
             const day = dateMatch[1].padStart(2, "0");
