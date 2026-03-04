@@ -58,7 +58,7 @@ const downloadMedia = async (instance, messageId) => {
     }
 
     const response = await axios.post(
-      `${apiUrl}/message/getBase64FromMediaMessage/${instance}`,
+      `${apiUrl}/chat/getBase64FromMediaMessage/${instance}`,
       { messageId, convertToMp4: false },
       {
         headers: { apikey: apiKey, "Content-Type": "application/json" },
