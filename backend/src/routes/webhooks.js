@@ -71,8 +71,8 @@ const handleWebhook = async (req, res) => {
           // Baixa a mídia da Evolution API
           const mediaPath = await downloadMedia(instanceName, key.id);
 
-          // Transcreve usando o Whisper (Modelo base para equilíbrio entre Velocidade/Precisão)
-          text = await transcribeLocal(mediaPath, "base");
+          // Transcreve usando o Whisper (Modelo small para melhor precisão mantendo velocidade)
+          text = await transcribeLocal(mediaPath, "small");
 
           // Limpa o arquivo de mídia baixado
           try {

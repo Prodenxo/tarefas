@@ -32,6 +32,8 @@ async function transcribeLocal(audioPath, model = "base") {
       outputDir,
       "--output_format",
       "txt",
+      "--initial_prompt",
+      "criar, tarefa, empresa, data, barra, de, janeiro, fevereiro, março, abril, maio, junho, julho, agosto, setembro, outubro, novembro, dezembro",
     ]);
 
     let stderr = "";
