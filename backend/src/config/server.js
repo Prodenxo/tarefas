@@ -6,9 +6,15 @@ const app = express();
 // Liberação de CORS para permitir acesso de qualquer origem
 app.use(
   cors({
-    origin: true, // Permite qualquer origem que faça a requisição
+    origin: "*", // Permite qualquer origem de forma explícita
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+    exposedHeaders: ["Content-Length", "X-Foo", "X-Bar"],
     credentials: true,
   }),
 );
