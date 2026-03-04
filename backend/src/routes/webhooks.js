@@ -2,6 +2,9 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/database");
 const axios = require("axios");
+const fs = require("fs");
+const { transcribeLocal } = require("../services/transcription");
+const { downloadMedia } = require("../services/whatsapp");
 
 // Função auxiliar para enviar resposta via WhatsApp
 const sendReply = async (instance, number, text) => {
@@ -58,6 +61,34 @@ const handleWebhook = async (req, res) => {
 
       if (!text && data.message && typeof data.message === "string")
         text = data.message;
+
+      // --- SUPORTE A ÁUDIO (TRANSCRIÇÃO WHISPER LOCAL) ---
+      if (!text && (message.audioMessage || message.videoMessage)) {
+        try {
+          console.log(
+            `[Webhook] Áudio/Vídeo detectado em ${instanceName}. Iniciando transcrição...`,
+          );
+          // Baixa a mídia da Evolution API
+          const mediaPath = await downloadMedia(instanceName, key.id);
+
+          // Transcreve usando o Whisper (Modelo base para equilíbrio entre Velocidade/Precisão)
+          text = await transcribeLocal(mediaPath, "base");
+
+          // Limpa o arquivo de mídia baixado
+          try {
+            fs.unlinkSync(mediaPath);
+          } catch (e) {}
+
+          if (text) {
+            console.log(`[Webhook] Transcrição concluída: "${text}"`);
+          }
+        } catch (err) {
+          console.error(
+            "[Webhook] Erro no processamento de áudio:",
+            err.message,
+          );
+        }
+      }
 
       console.log(
         `[Webhook] Texto: "${text}" de: ${remoteJid} (fromMe: ${key.fromMe})`,
