@@ -135,9 +135,11 @@ router.post("/:id/users", async (req, res) => {
       }
     }
 
+    const cleanRole = role === "user" || !role ? null : role.toLowerCase();
+
     await pool.query(
       "INSERT INTO user_companies (user_id, company_id, role) VALUES (?, ?, ?)",
-      [userId, id, role || "user"],
+      [userId, id, cleanRole],
     );
     res.status(201).json({ message: "Usuário vinculado com sucesso" });
   } catch (error) {
@@ -175,23 +177,13 @@ router.put("/:id/users/:userId/role", async (req, res) => {
     }
 
     // Executa o update com tratamento para restrições de ENUM
-    const cleanRole = (role || "user").toLowerCase();
-    try {
-      await pool.query(
-        "UPDATE user_companies SET role = ? WHERE user_id = ? AND company_id = ?",
-        [cleanRole, userId, id],
-      );
-    } catch (dbErr) {
-      console.warn(
-        "[AVISO] Banco rejeitou role. Tentando valor vazio...",
-        dbErr.message,
-      );
-      // Se falhar (ex: ENUM que não aceita 'user'), tenta gravar vazio
-      await pool.query(
-        "UPDATE user_companies SET role = '' WHERE user_id = ? AND company_id = ?",
-        [userId, id],
-      );
-    }
+    // Se for 'user', gravamos NULL para evitar erros de DB
+    const cleanRole = role === "user" || !role ? null : role.toLowerCase();
+
+    await pool.query(
+      "UPDATE user_companies SET role = ? WHERE user_id = ? AND company_id = ?",
+      [cleanRole, userId, id],
+    );
 
     res.json({ message: "Cargo atualizado com sucesso" });
   } catch (error) {
