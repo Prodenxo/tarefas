@@ -161,8 +161,11 @@ export default function Dashboard() {
   const [confirmData, setConfirmData] = useState({ title: '', message: '', onConfirm: () => {} });
 
   const storedUser = localStorage.getItem('user');
-  const user = storedUser ? JSON.parse(storedUser) : { name: 'Visitante', role: 'user' };
+  const user = storedUser ? JSON.parse(storedUser) : { name: 'Visitante', is_superadmin: 0 };
   const token = localStorage.getItem('token');
+
+  // Lógica de Role dinâmica
+  const currentRole = user.is_superadmin ? 'superadmin' : (selectedCompany?.user_role || 'user');
 
   const [newCompany, setNewCompany] = useState({ name: '', address: '', website: '' });
   const [newTask, setNewTask] = useState({ title: '', status: 'Iniciada', due_date: '' });
@@ -251,7 +254,7 @@ export default function Dashboard() {
   }, [apiUrl, token, selectedCompany, selectedMemberForDashboard]);
 
   const fetchAllDataForSuperadmin = useCallback(async () => {
-    if (user.role !== 'superadmin' && user.role !== 'gestor') return;
+    if (!user.is_superadmin && currentRole !== 'gestor' && currentRole !== 'admin') return;
     try {
       const [usersRes, compRes] = await Promise.all([
         axios.get(`${apiUrl}/users`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -275,7 +278,7 @@ export default function Dashboard() {
     } catch (err) {
       console.error("Erro ao buscar dados globais:", err);
     }
-  }, [apiUrl, token, user.role]);
+  }, [apiUrl, token, user.is_superadmin, currentRole]);
 
   useEffect(() => {
     if (!token) navigate('/login');
@@ -303,7 +306,7 @@ export default function Dashboard() {
       if (activeTab === 'dashboard') fetchDashboardTasks();
       
       // Se for gestor ou admin, busca todos os usuários (backend filtrará o que o gestor pode ver)
-      if (user.role === 'superadmin' || user.role === 'gestor') {
+      if (user.is_superadmin || currentRole === 'gestor' || currentRole === 'admin') {
         fetchAllDataForSuperadmin();
       }
     }
@@ -333,10 +336,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (activeTab === 'users' && user.role !== 'superadmin' && user.role !== 'gestor') {
+    if (activeTab === 'users' && !user.is_superadmin && currentRole !== 'gestor' && currentRole !== 'admin') {
       setActiveTab('dashboard');
     }
-  }, [activeTab, user.role]);
+  }, [activeTab, user.is_superadmin, currentRole]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -626,10 +629,10 @@ export default function Dashboard() {
           
           <div className="selection-title-area">
             <h1>CoreTask</h1>
-            <p className="subtitle">Bem-vindo, {user.name}! <span className="badge-role">{user.role}</span></p>
+            <p className="subtitle">Bem-vindo, {user.name}! <span className="badge-role">{user.is_superadmin ? 'SuperAdmin' : 'Membro'}</span></p>
           </div>
 
-          {user.role === 'superadmin' && (
+          {user.is_superadmin && (
             <div className="selection-actions">
               <button className="btn-centered-premium" onClick={() => setIsModalOpen(true)}>
                 <Plus size={22} />
@@ -706,7 +709,7 @@ export default function Dashboard() {
           <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
             <LayoutDashboard size={20} /> Dashboard
           </div>
-          {(user.role === 'superadmin' || user.role === 'gestor') && (
+          {(user.is_superadmin || currentRole === 'gestor' || currentRole === 'admin') && (
             <div className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
               <Users size={20} /> Usuários
             </div>
@@ -758,7 +761,7 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
-            {activeTab === 'users' && (user.role === 'superadmin' || user.role === 'gestor') && (
+            {activeTab === 'users' && (user.is_superadmin || currentRole === 'gestor' || currentRole === 'admin') && (
               <>
                 <div className="search-box" style={{ position: 'relative' }}>
                   <input 
@@ -905,7 +908,7 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        ) : activeTab === 'users' && (user.role === 'superadmin' || user.role === 'gestor') ? (
+        ) : activeTab === 'users' && (user.is_superadmin || currentRole === 'gestor' || currentRole === 'admin') ? (
           <div className="users-panel glass">
             <div className="panel-header" style={{ marginBottom: '24px' }}>
               <h3 style={{ margin: 0 }}>Membros - {selectedCompany?.name}</h3>
@@ -916,7 +919,7 @@ export default function Dashboard() {
                   <tr>
                     <th>Usuário</th>
                     <th>Email</th>
-                    {user.role === 'superadmin' && <th>Cargo (Role)</th>}
+                    {user.is_superadmin && <th>Cargo (Role)</th>}
                     <th>Vínculos</th>
                     <th style={{ textAlign: 'right' }}>Ações</th>
                   </tr>
@@ -939,10 +942,10 @@ export default function Dashboard() {
                         <td className="text-secondary">{u.email}</td>
                         
                           <td>
-                            {user.role === 'gestor' && (u.id === user.id || u.role !== 'user') ? (
+                            {(user.is_superadmin || currentRole === 'gestor' || currentRole === 'admin') && (u.id === user.id || u.is_superadmin) ? (
                               <div className="text-secondary flex items-center gap-2 p-2">
-                                {u.role === 'gestor' ? <Clock size={14} className="text-secondary" /> : <AlertCircle size={14} className="text-secondary" />} 
-                                {u.role === 'gestor' ? 'Gestor' : 'Superadmin'}
+                                {u.is_superadmin ? <AlertCircle size={14} className="text-secondary" /> : <Clock size={14} className="text-secondary" />} 
+                                {u.is_superadmin ? 'Superadmin' : 'Gestor/Admin'}
                               </div>
                             ) : (
                               <SingleSelect 
@@ -960,7 +963,7 @@ export default function Dashboard() {
                         <td>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                             {u.currentLinks
-                              .filter(link => user.role === 'superadmin' || link.id === selectedCompany.id)
+                              .filter(link => user.is_superadmin || link.id === selectedCompany.id)
                               .map(link => (
                               <span key={link.id} className="selection-badge">
                                 {link.name}
@@ -969,7 +972,7 @@ export default function Dashboard() {
                           </div>
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          {!(user.role === 'gestor' && user.id === u.id) && (
+                          {!(currentRole === 'gestor' && user.id === u.id) && (
                             <button 
                               className="icon-btn" 
                               style={{ 
@@ -1008,14 +1011,14 @@ export default function Dashboard() {
 
                   <div className="links-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {selectedUserForLinks.currentLinks
-                      .filter(link => user.role === 'superadmin' || link.id === selectedCompany.id)
+                      .filter(link => user.is_superadmin || link.id === selectedCompany.id)
                       .map(link => (
                       <div key={link.id} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.03)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <Building2 size={18} className="text-secondary" />
                           <span style={{ fontWeight: '500' }}>{link.name}</span>
                         </div>
-                        {!(user.role === 'gestor' && user.id === selectedUserForLinks.id) && (
+                        {!(currentRole === 'gestor' && user.id === selectedUserForLinks.id) && (
                           <button 
                             className="icon-btn text-red" 
                             style={{ background: 'rgba(255, 59, 48, 0.1)', padding: '6px' }}
@@ -1061,7 +1064,7 @@ export default function Dashboard() {
 
                   <div className="user-selection-list" style={{ maxHeight: '300px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
                     {allUsers
-                      .filter(u => u.role !== 'superadmin')
+                      .filter(u => !u.is_superadmin)
                       .filter(u => !u.currentLinks.some(l => l.id === selectedCompany.id))
                       .filter(u => u.name.toLowerCase().includes(modalSearch.toLowerCase()) || u.email.toLowerCase().includes(modalSearch.toLowerCase()))
                       .map(u => (
@@ -1082,7 +1085,7 @@ export default function Dashboard() {
                           </button>
                         </div>
                       ))}
-                    {(allUsers.filter(u => u.role !== 'superadmin' && !u.currentLinks.some(l => l.id === selectedCompany.id)).length === 0) && (
+                    {(allUsers.filter(u => !u.is_superadmin && !u.currentLinks.some(l => l.id === selectedCompany.id)).length === 0) && (
                       <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>Nenhum usuário disponível para vincular.</div>
                     )}
                   </div>
@@ -1333,12 +1336,12 @@ export default function Dashboard() {
               />
             </div>
 
-            {(user.role === 'superadmin' || user.role === 'gestor') && activeTab === 'dashboard' && (
+            {(user.is_superadmin || currentRole === 'gestor' || currentRole === 'admin') && activeTab === 'dashboard' && (
               <div className="floating-selector-group">
                 <div className="selector-label">Visualizando Membro:</div>
                 <SingleSelect 
                   options={allUsers
-                    .filter(u => user.role === 'superadmin' || u.currentLinks.some(l => l.id === selectedCompany.id))
+                    .filter(u => user.is_superadmin || u.currentLinks.some(l => l.id === selectedCompany.id))
                     .map(u => ({ value: u.id, label: u.name }))
                   }
                   selected={selectedMemberForDashboard.id}

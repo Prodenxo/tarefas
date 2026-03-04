@@ -13,6 +13,13 @@ const authMiddleware = (req, res, next) => {
 
   try {
     const verified = jwt.verify(token, process.env.JWT_SECRET);
+    // Compatibilidade: se o token for antigo e tiver 'role', mapeia para is_superadmin
+    if (
+      verified.role === "superadmin" &&
+      verified.is_superadmin === undefined
+    ) {
+      verified.is_superadmin = 1;
+    }
     req.user = verified;
     next();
   } catch (error) {

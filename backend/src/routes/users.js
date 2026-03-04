@@ -6,11 +6,19 @@ const pool = require("../config/database");
 // Vamos permitir que superadmin veja tudo
 router.get("/", async (req, res) => {
   try {
-    if (
-      req.user.role !== "superadmin" &&
-      req.user.role !== "admin" &&
-      req.user.role !== "gestor"
-    ) {
+    const isSuper = req.user.is_superadmin;
+    // Busca se o usuário logado tem cargo de gestor/admin em alguma empresa
+    const [userRoles] = await pool.query(
+      "SELECT DISTINCT role FROM user_companies WHERE user_id = ?",
+      [req.user.id],
+    );
+    const isGestor = userRoles.some(
+      (r) =>
+        r.role &&
+        (r.role.toLowerCase() === "gestor" || r.role.toLowerCase() === "admin"),
+    );
+
+    if (!isSuper && !isGestor) {
       return res.status(403).json({ message: "Acesso negado." });
     }
 
@@ -18,11 +26,11 @@ router.get("/", async (req, res) => {
     let query = "";
     let params = [];
 
-    if (req.user.role === "gestor") {
+    if (!isSuper && isGestor) {
       // Gestor só vê usuários que estão vinculados a PELO MENOS UMA empresa que ele também está vinculado
       query = `
         SELECT 
-          u.id, u.name, u.email, u.role, u.active, u.wa_instance, u.whatsapp_number, u.created_at,
+          u.id, u.name, u.email, u.is_superadmin, u.active, u.wa_instance, u.whatsapp_number, u.created_at,
           JSON_ARRAYAGG(
             JSON_OBJECT('id', c.id, 'name', c.name, 'role', uc.role)
           ) as linked_companies
@@ -40,7 +48,7 @@ router.get("/", async (req, res) => {
       // Superadmin/Admin vê tudo
       query = `
         SELECT 
-          u.id, u.name, u.email, u.role, u.active, u.wa_instance, u.whatsapp_number, u.created_at,
+          u.id, u.name, u.email, u.is_superadmin, u.active, u.wa_instance, u.whatsapp_number, u.created_at,
           JSON_ARRAYAGG(
             JSON_OBJECT('id', c.id, 'name', c.name, 'role', uc.role)
           ) as linked_companies
@@ -55,7 +63,7 @@ router.get("/", async (req, res) => {
 
     // Buscar empresas que o gestor logado gerencia para filtrar os resultados (caso queira ocultar vínculos com outras empresas)
     let managedCompanyIds = [];
-    if (req.user.role === "gestor") {
+    if (!isSuper && isGestor) {
       const [userLinks] = await pool.query(
         "SELECT company_id FROM user_companies WHERE user_id = ?",
         [req.user.id],
@@ -79,7 +87,7 @@ router.get("/", async (req, res) => {
       }
 
       // Se for gestor, ele só vê o vínculo com as empresas que ELE também gerencia
-      if (req.user.role === "gestor") {
+      if (!isSuper && isGestor) {
         links = links.filter((link) => managedCompanyIds.includes(link.id));
       }
 
@@ -102,12 +110,12 @@ router.get("/:id", async (req, res) => {
     const { id } = req.params;
 
     // Usuário pode ver a si mesmo ou superadmin vê qualquer um
-    if (req.user.id != id && req.user.role !== "superadmin") {
+    if (req.user.id != id && !req.user.is_superadmin) {
       return res.status(403).json({ message: "Acesso negado." });
     }
 
     const [rows] = await pool.query(
-      "SELECT id, name, email, role, active, wa_instance, whatsapp_number, created_at FROM users WHERE id = ?",
+      "SELECT id, name, email, is_superadmin, active, wa_instance, whatsapp_number, created_at FROM users WHERE id = ?",
       [id],
     );
     if (rows.length === 0)
@@ -126,17 +134,6 @@ router.put("/:id", async (req, res) => {
     const { name, email, active, role, wa_instance, whatsapp_number } =
       req.body;
 
-    // Permite que o próprio usuário se edite, ou que Superadmins/Gestores editem outros
-    if (
-      req.user.id != id &&
-      req.user.role !== "superadmin" &&
-      req.user.role !== "gestor"
-    ) {
-      return res.status(403).json({ message: "Acesso negado." });
-    }
-
-    // Apenas superadmin pode mudar qualquer role.
-    // Gestores podem mudar roles EXCETO para superadmin, e não podem mexer em quem já é superadmin.
     let updateQuery =
       "UPDATE users SET name = ?, email = ?, active = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
     let params = [
@@ -148,67 +145,33 @@ router.put("/:id", async (req, res) => {
       id,
     ];
 
-    if (role) {
-      // Primeiro buscamos a role atual para ver se mudou
-      const [currentUserRows] = await pool.query(
-        "SELECT role FROM users WHERE id = ?",
-        [id],
-      );
-      const currentRole =
-        currentUserRows.length > 0 ? currentUserRows[0].role : null;
+    // Permite que o próprio usuário se edite, ou que Superadmins editem outros
+    const isSuper = req.user.is_superadmin;
+    if (req.user.id != id && !isSuper) {
+      // Se não for super admin, talvez seja gestor?
+      // Por enquanto, vamos manter apenas superadmin podendo editar outros usuários globais.
+      return res.status(403).json({ message: "Acesso negado." });
+    }
 
-      // Só executa lógica de cargo se estiver TENTANDO MUDAR o cargo
-      if (role !== currentRole) {
-        if (req.user.role === "superadmin") {
-          updateQuery =
-            "UPDATE users SET name = ?, email = ?, active = ?, role = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
-          params = [
-            name,
-            email,
-            active !== undefined ? active : 1,
-            role,
-            wa_instance || null,
-            whatsapp_number || null,
-            id,
-          ];
-        } else if (req.user.role === "gestor") {
-          // Gestor não pode mudar o próprio cargo
-          if (req.user.id == id) {
-            return res.status(403).json({
-              message: "Gestores não podem alterar o seu próprio cargo.",
-            });
-          }
+    const { is_superadmin } = req.body;
 
-          if (currentUserRows.length > 0) {
-            // REGRA DE HIERARQUIA: Gestor só pode mexer em quem é 'user' (Colaborador)
-            // Uma vez que o usuário é Gestor, ele só pode ser editado por Superadmin.
-            if (currentRole === "user" && role !== "superadmin") {
-              updateQuery =
-                "UPDATE users SET name = ?, email = ?, active = ?, role = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
-              params = [
-                name,
-                email,
-                active !== undefined ? active : 1,
-                role,
-                wa_instance || null,
-                whatsapp_number || null,
-                id,
-              ];
-            } else if (role === "superadmin") {
-              return res.status(403).json({
-                message: "Gestores não podem promover usuários a Superadmin.",
-              });
-            } else if (currentRole !== "user") {
-              return res.status(403).json({
-                message:
-                  "Gestores não podem alterar cargos de outros Gestores ou Superadmins.",
-              });
-            }
-          }
-        } else if (req.user.id != id) {
-          // Usuário normal tentando mudar role de outro
-          return res.status(403).json({ message: "Acesso negado." });
-        }
+    if (is_superadmin !== undefined && is_superadmin !== null) {
+      if (isSuper) {
+        updateQuery =
+          "UPDATE users SET name = ?, email = ?, active = ?, is_superadmin = ?, wa_instance = ?, whatsapp_number = ? WHERE id = ?";
+        params = [
+          name,
+          email,
+          active !== undefined ? active : 1,
+          is_superadmin,
+          wa_instance || null,
+          whatsapp_number || null,
+          id,
+        ];
+      } else {
+        return res.status(403).json({
+          message: "Apenas Super Admins podem alterar o status de Super Admin.",
+        });
       }
     }
 
@@ -224,7 +187,7 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    if (req.user.role !== "superadmin") {
+    if (!req.user.is_superadmin) {
       return res
         .status(403)
         .json({ message: "Apenas Superadmins podem deletar usuários." });

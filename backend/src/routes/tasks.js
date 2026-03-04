@@ -16,13 +16,22 @@ router.get("/", async (req, res) => {
       "SELECT t.*, u.name as creator_name FROM tasks t INNER JOIN users u ON t.created_by_user_id = u.id WHERE t.company_id = ?";
     let params = [company_id];
 
+    // Determinar se o usuário é superadmin ou tem cargo de gestão nesta empresa
+    const isSuper = req.user.is_superadmin;
+    let isManager = isSuper;
+
+    if (!isSuper) {
+      const [roleCheck] = await pool.query(
+        "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ?",
+        [req.user.id, company_id],
+      );
+      const userLocalRole = (roleCheck[0]?.role || "").toLowerCase();
+      isManager = userLocalRole === "gestor" || userLocalRole === "admin";
+    }
+
     // Se um user_id for fornecido e o usuário tiver permissão, filtra por ele
     if (user_id) {
-      if (
-        req.user.role === "gestor" ||
-        req.user.role === "superadmin" ||
-        req.user.role === "admin"
-      ) {
+      if (isManager) {
         query += " AND (t.created_by_user_id = ? OR t.assigned_to_user_id = ?)";
         params.push(user_id, user_id);
       } else {
@@ -30,11 +39,7 @@ router.get("/", async (req, res) => {
         params.push(req.user.id, req.user.id);
       }
     } else {
-      if (
-        req.user.role !== "gestor" &&
-        req.user.role !== "superadmin" &&
-        req.user.role !== "admin"
-      ) {
+      if (!isManager) {
         query += " AND (t.created_by_user_id = ? OR t.assigned_to_user_id = ?)";
         params.push(req.user.id, req.user.id);
       }

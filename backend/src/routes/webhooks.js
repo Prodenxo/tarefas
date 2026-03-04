@@ -72,7 +72,7 @@ const handleWebhook = async (req, res) => {
       // 1. IDENTIFICAR USUÁRIO COM PRECISÃO PELO NÚMERO DE WHATSAPP
       // Busca exata pelo final do número para evitar conflitos de JID v2
       const [users] = await pool.query(
-        "SELECT id, name, role FROM users WHERE whatsapp_number IS NOT NULL AND ? LIKE CONCAT('%', whatsapp_number) AND LENGTH(whatsapp_number) >= 8 LIMIT 1",
+        "SELECT id, name, is_superadmin FROM users WHERE whatsapp_number IS NOT NULL AND ? LIKE CONCAT('%', whatsapp_number) AND LENGTH(whatsapp_number) >= 8 LIMIT 1",
         [cleanRemoteJid],
       );
 
@@ -126,7 +126,7 @@ const handleWebhook = async (req, res) => {
         const title = createMatch[1].trim() || "Nova tarefa";
 
         let companies = [];
-        if (user.role === "superadmin") {
+        if (user.is_superadmin) {
           // Super Admin vê tudo
           [companies] = await pool.query(
             "SELECT id, name FROM companies WHERE active = 1",
@@ -169,7 +169,7 @@ const handleWebhook = async (req, res) => {
         let companyList = `👋 Olá ${user.name}!\n\n🏢 *Para qual empresa deseja criar a tarefa?*\n\n`;
         companies.forEach((c, idx) => {
           let roleLabel = "";
-          if (user.role === "superadmin") {
+          if (user.is_superadmin) {
             roleLabel = " (Admin)";
           }
           companyList += `${idx + 1}. ${c.name}${roleLabel}\n`;
@@ -205,8 +205,7 @@ const handleWebhook = async (req, res) => {
         );
 
         const dbRole = (roles[0]?.role || "").toLowerCase().trim();
-        const isAdminGlobal =
-          (user.role || "").toLowerCase().trim() === "superadmin";
+        const isAdminGlobal = user.is_superadmin;
 
         // Só delega se for SuperAdmin GLOBAL ou se o cargo NESTA empresa for gestor/admin
         let canManage =
