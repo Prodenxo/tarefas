@@ -15,6 +15,12 @@ app.get("/", (req, res) => {
   res.send("Gestor de Tarefas API is running");
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+// Inicia o servidor localmente
+// A Vercel não utiliza o app.listen(), ela gerencia o servidor através do export do app
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+  });
+}
+
+module.exports = app;

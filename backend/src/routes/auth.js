@@ -8,6 +8,15 @@ require("dotenv").config();
 // Login
 router.post("/login", async (req, res) => {
   try {
+    console.log("[DEBUG] Headers:", req.headers);
+    console.log("[DEBUG] Body:", req.body);
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        error: "Corpo da requisição vazio ou inválido.",
+        received_body: req.body,
+        content_type: req.headers["content-type"],
+      });
+    }
     const { email, password } = req.body;
 
     const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [
@@ -26,7 +35,7 @@ router.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, is_superadmin: user.is_superadmin },
       process.env.JWT_SECRET,
       { expiresIn: "8h" },
     );
@@ -38,7 +47,7 @@ router.post("/login", async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        is_superadmin: user.is_superadmin,
       },
     });
   } catch (error) {
@@ -57,15 +66,15 @@ router.post("/register", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Por padrão novos usuários são 'user'
+    // Por padrão novos usuários são colaboradores normais (pela tabela user_companies)
     const [result] = await pool.query(
-      "INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, 'user', 1)",
+      "INSERT INTO users (name, email, password_hash, active) VALUES (?, ?, ?, 1)",
       [name, email, hashedPassword],
     );
 
     res.status(201).json({
       message: "Usuário cadastrado com sucesso",
-      user: { id: result.insertId, name, email, role: "user" },
+      user: { id: result.insertId, name, email, is_superadmin: 0 },
     });
   } catch (error) {
     console.error("ERRO NO REGISTRO:", error);

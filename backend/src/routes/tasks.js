@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../config/database");
+const { sendWhatsAppMessage } = require("../services/whatsapp");
 console.log(">>> LOADING TASKS ROUTER <<<");
 
 // Listar tarefas da empresa atual com lógica de visibilidade
@@ -15,29 +16,32 @@ router.get("/", async (req, res) => {
       "SELECT t.*, u.name as creator_name FROM tasks t INNER JOIN users u ON t.created_by_user_id = u.id WHERE t.company_id = ?";
     let params = [company_id];
 
+    // Determinar se o usuário é superadmin ou tem cargo de gestão nesta empresa
+    const isSuper = req.user.is_superadmin;
+    let isManager = isSuper;
+
+    if (!isSuper) {
+      const [roleCheck] = await pool.query(
+        "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ?",
+        [req.user.id, company_id],
+      );
+      const userLocalRole = (roleCheck[0]?.role || "").toLowerCase();
+      isManager = userLocalRole === "gestor" || userLocalRole === "admin";
+    }
+
     // Se um user_id for fornecido e o usuário tiver permissão, filtra por ele
     if (user_id) {
-      if (
-        req.user.role === "gestor" ||
-        req.user.role === "superadmin" ||
-        req.user.role === "admin"
-      ) {
-        query += " AND t.created_by_user_id = ?";
-        params.push(user_id);
+      if (isManager) {
+        query += " AND (t.created_by_user_id = ? OR t.assigned_to_user_id = ?)";
+        params.push(user_id, user_id);
       } else {
-        // Colaborador normal só pode ver as próprias, mesmo se tentar forçar outro user_id
-        query += " AND t.created_by_user_id = ?";
-        params.push(req.user.id);
+        query += " AND (t.created_by_user_id = ? OR t.assigned_to_user_id = ?)";
+        params.push(req.user.id, req.user.id);
       }
     } else {
-      // Se não passar user_id, mantemos a lógica anterior: gestores veem tudo, outros só as próprias
-      if (
-        req.user.role !== "gestor" &&
-        req.user.role !== "superadmin" &&
-        req.user.role !== "admin"
-      ) {
-        query += " AND t.created_by_user_id = ?";
-        params.push(req.user.id);
+      if (!isManager) {
+        query += " AND (t.created_by_user_id = ? OR t.assigned_to_user_id = ?)";
+        params.push(req.user.id, req.user.id);
       }
     }
 
@@ -77,9 +81,34 @@ router.post("/", async (req, res) => {
     }
 
     const [result] = await pool.query(
-      "INSERT INTO tasks (company_id, created_by_user_id, title, status, due_date) VALUES (?, ?, ?, ?, ?)",
-      [company_id, req.user.id, title, status || "Iniciada", due_date || null],
+      "INSERT INTO tasks (company_id, created_by_user_id, assigned_to_user_id, title, status, due_date) VALUES (?, ?, ?, ?, ?, ?)",
+      [
+        company_id,
+        req.user.id,
+        req.user.id,
+        title,
+        status || "Iniciada",
+        due_date || null,
+      ],
     );
+
+    // Enviar notificação por WhatsApp (Opcional)
+    try {
+      // Buscar o telefone do criador
+      const [userRows] = await pool.query(
+        "SELECT whatsapp_number, email FROM users WHERE id = ?",
+        [req.user.id],
+      );
+      if (userRows.length > 0 && userRows[0].whatsapp_number) {
+        // Enviar mensagem para o número de WhatsApp do usuário
+        await sendWhatsAppMessage(
+          userRows[0].whatsapp_number,
+          `✅ Nova tarefa criada: *${title}* \nStatus: ${status || "Iniciada"}`,
+        );
+      }
+    } catch (wsErr) {
+      console.error("[WhatsApp Integration] Falha no aviso:", wsErr.message);
+    }
 
     res.status(201).json({
       id: result.insertId,

@@ -6,13 +6,15 @@ const pool = require("../config/database");
 router.get("/", async (req, res) => {
   try {
     let rows;
-    if (req.user.role === "superadmin") {
+    if (req.user.is_superadmin) {
       // Superadmin vê todas
-      [rows] = await pool.query("SELECT * FROM companies");
-    } else {
-      // Outros usuários vêem apenas as vinculadas
       [rows] = await pool.query(
-        "SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ?",
+        "SELECT *, 'superadmin' as user_role FROM companies",
+      );
+    } else {
+      // Outros usuários vêem apenas as vinculadas, trazendo seu respectivo cargo
+      [rows] = await pool.query(
+        "SELECT c.*, uc.role as user_role FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ?",
         [req.user.id],
       );
     }
@@ -40,7 +42,7 @@ router.get("/:id", async (req, res) => {
 // Criar nova empresa (Apenas Superadmin)
 router.post("/", async (req, res) => {
   try {
-    if (req.user.role !== "superadmin") {
+    if (!req.user.is_superadmin) {
       return res
         .status(403)
         .json({ message: "Apenas Super Admins podem criar empresas." });
@@ -62,7 +64,7 @@ router.post("/", async (req, res) => {
 // Atualizar empresa (Apenas Superadmin)
 router.put("/:id", async (req, res) => {
   try {
-    if (req.user.role !== "superadmin") {
+    if (!req.user.is_superadmin) {
       return res
         .status(403)
         .json({ message: "Apenas Super Admins podem editar empresas." });
@@ -83,7 +85,7 @@ router.put("/:id", async (req, res) => {
 // Deletar empresa (Apenas Superadmin)
 router.delete("/:id", async (req, res) => {
   try {
-    if (req.user.role !== "superadmin") {
+    if (!req.user.is_superadmin) {
       return res
         .status(403)
         .json({ message: "Apenas Super Admins podem deletar empresas." });
@@ -116,15 +118,19 @@ router.get("/:id/users", async (req, res) => {
 router.post("/:id/users", async (req, res) => {
   try {
     const { id } = req.params; // company_id
-    const { userId } = req.body;
+    const { userId, role } = req.body;
 
     // Permissão: Superadmin ou Gestor vinculado à empresa
-    if (req.user.role !== "superadmin") {
+    if (!req.user.is_superadmin) {
       const [check] = await pool.query(
-        "SELECT * FROM user_companies WHERE user_id = ? AND company_id = ?",
+        "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ?",
         [req.user.id, id],
       );
-      if (check.length === 0 || req.user.role !== "gestor") {
+      const userLocalRole = (check[0]?.role || "").toLowerCase();
+      if (
+        check.length === 0 ||
+        (userLocalRole !== "gestor" && userLocalRole !== "admin")
+      ) {
         return res.status(403).json({
           message:
             "Acesso negado. Apenas Gestores desta empresa ou Superadmins podem vincular usuários.",
@@ -132,13 +138,63 @@ router.post("/:id/users", async (req, res) => {
       }
     }
 
+    const cleanRole = role === "user" || !role ? null : role.toLowerCase();
+
     await pool.query(
-      "INSERT INTO user_companies (user_id, company_id) VALUES (?, ?)",
-      [userId, id],
+      "INSERT INTO user_companies (user_id, company_id, role) VALUES (?, ?, ?)",
+      [userId, id, cleanRole],
     );
     res.status(201).json({ message: "Usuário vinculado com sucesso" });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Atualizar cargo do usuário na empresa
+router.put("/:id/users/:userId/role", async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const { role } = req.body;
+
+    console.log(
+      `[DEBUG] Alterando role - Empresa: ${id}, Usuário: ${userId}, Nova Role: ${role}`,
+    );
+
+    // Permissão: Superadmin Global tem passe livre
+    if (!req.user.is_superadmin) {
+      const [check] = await pool.query(
+        "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ?",
+        [req.user.id, id],
+      );
+
+      const userLocalRole =
+        check.length > 0 ? (check[0].role || "").toLowerCase() : "";
+      const canEdit = userLocalRole === "gestor" || userLocalRole === "admin";
+
+      if (!canEdit) {
+        return res.status(403).json({
+          message:
+            "Acesso negado. Apenas Gestores locais ou Superadmins podem alterar cargos.",
+        });
+      }
+    }
+
+    // Executa o update com tratamento para restrições de ENUM
+    // Se for 'user', gravamos NULL para evitar erros de DB
+    const cleanRole = role === "user" || !role ? null : role.toLowerCase();
+
+    await pool.query(
+      "UPDATE user_companies SET role = ? WHERE user_id = ? AND company_id = ?",
+      [cleanRole, userId, id],
+    );
+
+    res.json({ message: "Cargo atualizado com sucesso" });
+  } catch (error) {
+    console.error("[CATASTRÓFICO] Erro ao mudar role:", error);
+    res.status(500).json({
+      error: "Erro interno ao atualizar cargo",
+      details: error.message,
+    });
   }
 });
 
@@ -148,7 +204,7 @@ router.delete("/:id/users/:userId", async (req, res) => {
     const { id, userId } = req.params;
 
     // Permissão: Superadmin ou Gestor vinculado à empresa
-    if (req.user.role !== "superadmin") {
+    if (!req.user.is_superadmin) {
       // Gestor não pode se desvincular sozinho (apenas Superadmin pode desvincular Gestores ativos)
       if (req.user.id.toString() === userId.toString()) {
         return res.status(403).json({
@@ -158,10 +214,14 @@ router.delete("/:id/users/:userId", async (req, res) => {
       }
 
       const [check] = await pool.query(
-        "SELECT * FROM user_companies WHERE user_id = ? AND company_id = ?",
+        "SELECT role FROM user_companies WHERE user_id = ? AND company_id = ?",
         [req.user.id, id],
       );
-      if (check.length === 0 || req.user.role !== "gestor") {
+      const userLocalRole = (check[0]?.role || "").toLowerCase();
+      if (
+        check.length === 0 ||
+        (userLocalRole !== "gestor" && userLocalRole !== "admin")
+      ) {
         return res.status(403).json({
           message:
             "Acesso negado. Apenas Gestores desta empresa ou Superadmins podem desvincular usuários.",
