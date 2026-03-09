@@ -584,7 +584,8 @@ export default function Dashboard() {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Sem data';
-    const date = new Date(dateString);
+    const [year, month, day] = dateString.split('T')[0].split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('pt-BR');
   };
 
